@@ -1,0 +1,12 @@
+setuptools>=40.5.0
+wheel>=0.22
+pylint>=2.1.1
+pytest>=3.5.1
+pytest-runner>=4.2
+pytest-pylint>=0.12.2
+pytest-benchmark>=3.1.1
+pytest-doctestplus>=0.2.0
+coverage>=4.5.1
+git+https://github.com/sztal/taukit.git@dev-0.0.0#egg=taukit
+mongoengine>=0.17.0,<1.0.0
+scrapy>=1.6.0,<2.0.0
