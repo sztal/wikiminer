@@ -73,8 +73,11 @@ class ApiAllPagesMain(ApiSpider):
         data = super().parse(response)
         pages = response.meta['pages']
         for p in data['query']['pages'].values():
-            page_id = jmp.search('page_id', p)
-            pages[page_id] = jmp.search('pageassessments', p)
+            page_id = str(jmp.search('pageid', p))
+            if page_id not in pages:
+                continue
+            assessments = jmp.search('pageassessments', p)
+            pages[page_id]['assessments'] = assessments
         for item in pages.values():
             if item is not None:
                 yield item
