@@ -25,7 +25,7 @@ class Page(Document):
 
     Attributes
     ----------
-    page_id : IntField
+    _id : IntField
         Page id. Primary key.
     ns : IntField
         Namespace.
@@ -50,7 +50,7 @@ class Page(Document):
     assessments : DictField
         Page assessments
     """
-    page_id = IntField(primary_key=True)
+    _id = IntField(primary_key=True)
     ns = IntField(required=True)
     title = StringField(required=True)
     page_type = StringField()
@@ -62,6 +62,7 @@ class Page(Document):
     assessments = DictField()
     # Settings
     _field_names_map = {
+        '_id': [ 'page_id' ],
         'page_type': [ 'type' ]
     }
     meta = {
