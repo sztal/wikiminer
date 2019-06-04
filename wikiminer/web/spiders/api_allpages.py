@@ -63,7 +63,7 @@ class ApiAllPagesMain(ApiSpider):
             }
         url = self.make_query(
             prop='pageassessments',
-            pageids='|'.join(map(str,  (p for p in pages)))
+            pageids='|'.join(map(str, (p for p in pages)))
         )
         request = Request(url, callback=self.parse_assessments)
         request.meta['pages'] = pages
