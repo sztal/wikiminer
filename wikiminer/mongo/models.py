@@ -50,14 +50,14 @@ class Page(Document):
     assessments : DictField
         Page assessments
     """
-    page_id = IntField(primary_key=True)
+    _id = IntField(primary_key=True)
     ns = IntField(required=True)
     title = StringField(required=True)
     page_type = StringField()
     source_text = StringField()
     template = ListField(StringField)
-    timestamp = DateTimeField(required=True)
-    create_timestamp = DateTimeField(required=True)
+    timestamp = DateTimeField()
+    create_timestamp = DateTimeField()
     popularity_score = FloatField()
     assessments = DictField()
     # Settings
