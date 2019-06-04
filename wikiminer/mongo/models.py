@@ -50,7 +50,7 @@ class Page(Document):
     assessments : DictField
         Page assessments
     """
-    _id = IntField(primary_key=True)
+    page_id = IntField(primary_key=True)
     ns = IntField(required=True)
     title = StringField(required=True)
     page_type = StringField()
