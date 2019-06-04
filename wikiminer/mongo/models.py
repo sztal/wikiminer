@@ -67,7 +67,6 @@ class Page(Document):
     meta = {
         'collection': 'wm_pages',
         'indexes': [
-            'page_id',
             'ns',
             'title',
             'page_type'
