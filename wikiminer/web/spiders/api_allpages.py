@@ -17,7 +17,7 @@ class ApiAllPages(ApiSpider):
     }
 
     def make_start_request(self, **kwds):
-        attrs = self.parse_attributes(return_null=False)
+        attrs = self.get_attributes(return_null=False)
         url = self.make_query(
             list='allpages',
             **attrs,

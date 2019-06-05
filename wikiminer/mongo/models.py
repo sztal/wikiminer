@@ -62,7 +62,7 @@ class Page(Document):
     assessments = DictField()
     # Settings
     _field_names_map = {
-        '_id': [ 'page_id' ],
+        '_id': [ 'page_id', 'pageid' ],
         'page_type': [ 'type' ]
     }
     meta = {

@@ -55,7 +55,7 @@ class ApiSpider(Spider):
         data = json.loads(response.body_as_unicode())
         return data
 
-    def parse_attributes(self, return_null=True, **kwds):
+    def get_attributes(self, return_null=True, **kwds):
         """Parse, set and return attributes dictionary.
 
         Parameters
