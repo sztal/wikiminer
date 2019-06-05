@@ -12,3 +12,4 @@ mongoengine>=0.17.0,<1.0.0
 scrapy>=1.6.0,<2.0.0
 furl>=2.0.0,<3.0.0
 jmespath>=0.9.4,<1.0.0
+cerberus>=1.2,<2.0
