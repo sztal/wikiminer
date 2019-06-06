@@ -15,7 +15,7 @@ class ApiPageAssessments(ApiSpider):
     _attributes_schema = {
         'palimit': { 'type': 'integer', 'coerce': int, 'default': 50 },
         'pasubprojects': { 'type': 'string', 'default': 'false' },
-        'ns': { 'type': 'string', 'required': True, 'default': 0 }
+        'ns': { 'type': 'integer', 'default': 0, 'coerce': int }
     }
 
     def make_start_request(self, **kwds):
