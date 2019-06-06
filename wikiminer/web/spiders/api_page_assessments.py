@@ -15,7 +15,7 @@ class ApiPageAssessments(ApiSpider):
     _attributes_schema = {
         'palimit': { 'type': 'integer', 'coerce': int, 'default': 50 },
         'pasubprojects': { 'type': 'string', 'default': 'false' },
-        'ns': { 'type': 'string', 'required': True }
+        'ns': { 'type': 'string', 'required': True, 'default': 0 }
     }
 
     def make_start_request(self, **kwds):
@@ -30,9 +30,12 @@ class ApiPageAssessments(ApiSpider):
 
     def start_requests(self):
         self.get_attributes()
-        cursor = _.Page.objects.aggregate({
-            '$project': { '_id': 1 }
-        })
+        cursor = _.Page.objects.aggregate(
+            { '$match': { 'ns': self.ns } },
+            { '$project': { '_id': 1 } },
+            { '$sort': { '_id': 1 } },
+            allowDiskUse=True
+        )
         for chunk in slice_chunks(map(lambda x: x['_id'], cursor), self.palimit):
             yield self.make_start_request(
                 pageids='|'.join(map(str, chunk))

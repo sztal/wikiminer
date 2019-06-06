@@ -21,6 +21,10 @@ NEWSPIDER_MODULE = 'wikiminer.web.spiders'
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
 
+# LOGGING SETTINGS
+LOG_ENABLED = True
+LOG_LEVEL = 'INFO'
+
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
 
