@@ -33,10 +33,10 @@ class ApiPageAssessments(ApiSpider):
         cursor = _.Page.objects.aggregate(
             { '$match': { 'ns': self.ns } },
             { '$project': { '_id': 1 } },
-            { '$sort': { '_id': 1 } },
             allowDiskUse=True
         )
-        for chunk in slice_chunks(map(lambda x: x['_id'], cursor), self.palimit):
+        pageids = [ d['_id'] for d in cursor ]
+        for chunk in slice_chunks(pageids, self.palimit):
             yield self.make_start_request(
                 pageids='|'.join(map(str, chunk))
             )
