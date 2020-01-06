@@ -1,9 +1,10 @@
 """Main objects namespace."""
-# pylint: disable=wildcard-import,unused-wildcard-import,no-member
+# pylint: disable=wildcard-import,unused-import,unused-wildcard-import,no-member
 import os
 from configparser import ExtendedInterpolation
 from taukit import Config
 from .mongo import init
+from .mongo.models import Page
 
 
 MODE = os.environ.get('RUNTIME_MODE', 'DEV')
