@@ -10,7 +10,7 @@ class ApiAllPages(ApiSpider):
 
     _attributes_schema = {
         'apfrom': { 'type': 'string' },
-        'apnamespace': { 'type': 'string', 'required': True },
+        'apnamespace': { 'type': 'integer', 'default': 0, 'coerce': int },
         'apminsize': { 'type': 'integer', 'coerce': int },
         'aplimit': { 'type': 'integer', 'coerce': int, 'default': 500 },
         'apfilterredir': { 'type': 'string', 'default': 'nonredirects' }

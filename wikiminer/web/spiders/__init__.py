@@ -17,6 +17,9 @@ class ApiSpider(Spider):
 
     _attributes_schema = {}
 
+    @property
+    def attributes_schema(self):
+        return {}
 
     def make_url(self, url=None, **kwds):
         """Make url.

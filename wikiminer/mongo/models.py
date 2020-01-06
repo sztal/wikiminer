@@ -3,7 +3,7 @@
 from mongoengine import StringField, DateTimeField
 from mongoengine import IntField, FloatField
 from mongoengine import ListField, DictField
-from taukit.db.mongo import Document, EmbeddedDocument
+from taukit.db.mongo import Document
 
 
 COLLECTIONS = ()

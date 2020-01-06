@@ -14,7 +14,7 @@ class ApiPageAssessments(ApiSpider):
 
     _attributes_schema = {
         'palimit': { 'type': 'integer', 'coerce': int, 'default': 50 },
-        'pasubprojects': { 'type': 'string', 'default': 'false' },
+        'pasubprojects': { 'type': 'string', 'default': 'true' },
         'ns': { 'type': 'integer', 'default': 0, 'coerce': int }
     }
 
