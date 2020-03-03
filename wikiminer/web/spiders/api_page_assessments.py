@@ -1,61 +1,80 @@
 """API Spider: page assessments extractor."""
 # pylint: disable=no-member
-from furl import furl
+from more_itertools import chunked
 import jmespath as jmp
 from scrapy import Request
-from taukit.utils import slice_chunks
+from dzeta.schema import Schema, fields
 from . import ApiSpider
 from ... import _
 
 
 class ApiPageAssessments(ApiSpider):
-    """API spider for extracting page assessments."""
+    """API spider for extracting page assessment data.
+
+    _Attributes_ section describes available user-provided arguments.
+    See _Wikipedia API_ docs_ for more info.
+
+    .. _docs: https://en.wikipedia.org/w/api.php?action=help&modules=query%2Bpageassessments
+
+    Attributes
+    ----------
+    model : str, optional
+        Mongoengine collection model to get page records from.
+    ns : int, optional
+        Namespace to use. Should be left to the default value of ``0``.
+    palimit : int
+        Number of pages in one batch. Defaults to ``500``.
+    pasubprojects : bool
+        If truthy then subprojects data is also collected.
+    """
     name = 'api_page_assessments'
 
-    _attributes_schema = {
-        'palimit': { 'type': 'integer', 'coerce': int, 'default': 50 },
-        'pasubprojects': { 'type': 'string', 'default': 'true' },
-        'ns': { 'type': 'integer', 'default': 0, 'coerce': int }
-    }
+    class Args(Schema):
+        model = fields.Str(required=False)
+        ns = fields.Int(missing=0, strict=False)
+        palimit = fields.Int(missing=50, strict=False, validate=[
+            lambda x: 0 < x <= 50
+        ])
+        pasubprojects = \
+            fields.Bool(missing=True, truthy=('yes', 'no'), falsy=('no', 'false'))
 
-    def make_start_request(self, **kwds):
-        attrs = self.get_attributes(return_null=False)
-        attrs = { k: v for k, v in attrs.items() if k.startswith('pa') }
-        url = self.make_query(
-            prop='pageassessments',
-            **attrs,
-            **kwds
+    def make_start_requests(self, **kwds):
+        query = {}
+        if self.args.model is not None:
+            query['_cls'] = self.args.model
+        if self.args.ns is not None:
+            query['ns'] = self.args.ns
+
+        cursor = _.Page.objects.aggregate(
+            { '$match': query },
+            { '$project': { '_id': 1} }
         )
-        return Request(url)
+        params = { 'palimit': self.args.palimit }
+        if self.args.pasubprojects:
+            params['pasubprojects'] = 'true'
+        for chunk in chunked(cursor, n=self.args.palimit):
+            url = self.make_query(
+                prop='pageassessments',
+                pageids='|'.join(str(doc['_id']) for doc in chunk),
+                **{ **params, **kwds }
+            )
+            yield Request(url)
 
     def start_requests(self):
-        self.get_attributes()
-        cursor = _.Page.objects.aggregate(
-            { '$match': { 'ns': self.ns } },
-            { '$project': { '_id': 1 } },
-            allowDiskUse=True
-        )
-        pageids = [ d['_id'] for d in cursor ]
-        for chunk in slice_chunks(pageids, self.palimit):
-            yield self.make_start_request(
-                pageids='|'.join(map(str, chunk))
-            )
+        yield from self.make_start_requests()
 
     def parse(self, response):
         data = super().parse(response)
-        cont = jmp.search('continue.pacontinue', data)
-        if cont:
-            url = furl(response.url)
-            url.add({ 'pacontinue': cont })
-            yield Request(url.tostr())
-        pages = jmp.search('query.pages', data)
-        for p in pages.values():
-            page_id = jmp.search('pageid', p)
-            assessments = jmp.search('pageassessments', p)
-            if not assessments:
+        pages = list(jmp.search('query.pages', data).values())
+        for page in pages:
+            if 'missing' in page:
                 continue
-            item = {
+            page_id = page['pageid']
+            title = page['title']
+            assessments = page.get('pageassessments', [])
+            doc = {
                 '_id': page_id,
+                'title': title,
                 'assessments': assessments
             }
-            yield item
+            yield doc

@@ -6,11 +6,11 @@ pymongo
 mongoengine
 """
 # pylint: disable=wildcard-import
-import mongoengine
+from mongoengine import connect
 from .models import *
 
 
-def init(user, password, host, port, db, authentication_db=None, **kwds):
+def init(user, password, host, port, db, **kwds):
     """Initilize Mongoengine ODM.
 
     Parameters
@@ -25,24 +25,10 @@ def init(user, password, host, port, db, authentication_db=None, **kwds):
         Port number.
     db : str
         Database name.
-    authentication_db : str or None
-        Authentication database name.
-        Use `db` if ``None``.
     kwds :
-        Keyword arguments passed to
-        :py:func:`mongoengine.connect`.
+        Passed to :py:func:`pymodm.connection.connect`.
     """
-    def connect(uri, authentication_source, **kwds):
-        """Connect to MongoDB."""
-        return mongoengine.connect(
-            host=uri,
-            authentication_source=authentication_source,
-            **kwds
-        )
-
     mongo_uri = 'mongodb://{username}:{password}@{host}:{port}/{db}'
-    if not authentication_db:
-        authentication_db = db
     uri = mongo_uri.format(
         username=user,
         password=password,
@@ -50,5 +36,4 @@ def init(user, password, host, port, db, authentication_db=None, **kwds):
         port=port,
         db=db
     )
-    mongo = connect(uri, authentication_db, **kwds)
-    return mongo
+    connect(host=uri, **kwds)
