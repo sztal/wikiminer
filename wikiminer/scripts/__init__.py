@@ -262,7 +262,7 @@ def get_direct_communication(filepath=None, **kwds):
         'pipeline': [
             { '$match': { '$expr': {
                 '$and': [
-                    { '$eq': [ '$_cls', 'Page.UserPage' ] },
+                    { '$eq': [ '$_cls', _.UserPage._class_name ] },
                     { '$in': [ '$ns', [2, 3] ] },
                     { '$eq': [ '$user_name', '$$user_name' ] }
                 ]
@@ -282,7 +282,10 @@ def get_direct_communication(filepath=None, **kwds):
         'as': 'userpage'
     } })
 
-    cursor = _.User.objects.aggregate(*pipeline, **{ 'allowDiskUse': True, **kwds })
+    cursor = _.User.objects.aggregate(
+        *pipeline,
+        **{ 'allowDiskUse': True, **kwds }
+    )
 
     if filepath:
         with open(filepath, 'x') as handle:
@@ -307,41 +310,35 @@ def get_page_assessments(filepath=None, **kwds):
             '_cls': _.Page._class_name,
             'ns': 0,
             '$and': [
-                { 'assessments': { '$exists': True} },
-                { 'assessments': { '$ne': [] } }
+                { 'assessments': { '$exists': True } },
+                { 'assessments': { '$nin': [ [], None ] } }
             ]
         } },
         { '$project': {
+            '_id': 1,
             'title': 1,
             'ns': 1,
             'assessments': { '$objectToArray': '$assessments' }
         } },
         { '$unwind': '$assessments' },
         { '$addFields': {
-            'assessment': {
-                'wp': '$assessments.k',
-                'class': '$assessments.v.class',
-                'importance': '$assessments.v.importance'
-            }
-        } },
-        { '$group': {
-            '_id': '$_id',
-            'title': { '$first': '$title' },
-            'ns': { '$first': '$ns' },
-            'assessments': { '$addToSet': '$assessment' }
+            'wp': '$assessments.k',
+            'class': '$assessments.v.class',
+            'importance': '$assessments.v.importance',
+            'page_id': '$_id',
         } },
         { '$project': {
             '_id': 0,
-            'page_id': '$_id',
-            'ns': 1,
-            'title': 1,
-            'assessments': 1
+            'assessments': 0
         } },
-        **{ 'allowDiskUse': True, **kwds }
+        **kwds
     )
 
     if filepath:
         with open(filepath, 'x') as handle:
+            columns = ['page_id', 'title', 'ns', 'wp', 'class', 'importance']
+            handle.write("\t".join(columns)+"\n")
             for doc in tqdm(cursor):
-                handle.write(json.dumps(doc, default=str)+"\n")
+                line = "\t".join(str(doc[col]) for col in columns)+"\n"
+                handle.write(line)
     return cursor

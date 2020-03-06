@@ -28,6 +28,11 @@ class ApiPageAssessments(ApiSpider):
         If truthy then subprojects data is also collected.
     """
     name = 'api_page_assessments'
+    # Spider setings
+    custom_settings = {
+        'AUTOTHROTTLE_TARGET_CONCURRENCY': 3.0
+    }
+
 
     class Args(Schema):
         model = fields.Str(required=False)
@@ -36,7 +41,9 @@ class ApiPageAssessments(ApiSpider):
             lambda x: 0 < x <= 50
         ])
         pasubprojects = \
-            fields.Bool(missing=True, truthy=('yes', 'no'), falsy=('no', 'false'))
+            fields.Bool(missing=True, truthy=('yes', 'true'), falsy=('no', 'false'))
+        missing_only = \
+            fields.Bool(missing=False, truthy=('yes', 'true'), falsy=('no', 'false'))
 
     def make_start_requests(self, **kwds):
         query = {}
@@ -44,10 +51,16 @@ class ApiPageAssessments(ApiSpider):
             query['_cls'] = self.args.model
         if self.args.ns is not None:
             query['ns'] = self.args.ns
+        if self.args.missing_only:
+            query['$or'] = [
+                { 'assessments': { '$exists': False } },
+                { 'assessments': None },
+                { 'assessments': [] }
+            ]
 
         cursor = _.Page.objects.aggregate(
             { '$match': query },
-            { '$project': { '_id': 1} }
+            { '$project': { '_id': 1 } }
         )
         params = { 'palimit': self.args.palimit }
         if self.args.pasubprojects:
