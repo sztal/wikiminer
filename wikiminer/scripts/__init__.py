@@ -322,17 +322,25 @@ def get_page_assessments(filepath=None, **kwds):
         } },
         { '$unwind': '$assessments' },
         { '$addFields': {
-            'wp': '$assessments.k',
+            'wp': { '$split': [ '$assessments.k', '/' ] },
             'class': '$assessments.v.class',
             'importance': '$assessments.v.importance',
             'page_id': '$_id',
         } },
+        { '$unwind': '$wp' },
         { '$project': {
             '_id': 0,
             'assessments': 0
         } },
         **kwds
     )
+
+    rx = re.compile(r"^WikiProject", re.IGNORECASE)
+    def correct_wp(doc):
+        doc['wp'] = rx.sub("", doc['wp']).strip()
+        return doc
+
+    cursor = map(correct_wp, cursor)
 
     if filepath:
         with open(filepath, 'x') as handle:
