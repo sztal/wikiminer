@@ -14,6 +14,8 @@ from ... import _
 class ApiWpUsers(ApiSpider):
     """API spider for getting user data for WikiProject members.
 
+    Only posts of ``Project`` and not ``Project talk`` pages are counted.
+
     _Attributes_ section describes available user-provided arguments.
     See _Wikipedia API_ docs for more info.
 
@@ -57,7 +59,10 @@ class ApiWpUsers(ApiSpider):
     def make_start_requests(self, **kwds):
         bots = self.get_bots()
         cursor = _.WikiProjectPage.objects.aggregate(
-            { '$match': { '_cls': 'Page.WikiProjectPage' } },
+            { '$match': {
+                '_cls': _.WikiProjectPage._class_name,
+                'ns': { '$in': [ 4 ] }
+            } },
             { '$unwind': '$posts' },
             { '$group': {
                 '_id': '$posts.user_name',
