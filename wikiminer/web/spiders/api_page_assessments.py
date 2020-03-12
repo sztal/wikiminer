@@ -1,5 +1,6 @@
 """API Spider: page assessments extractor."""
 # pylint: disable=no-member
+from urllib.parse import urlparse, unquote
 from more_itertools import chunked
 import jmespath as jmp
 from scrapy import Request
@@ -30,7 +31,7 @@ class ApiPageAssessments(ApiSpider):
     name = 'api_page_assessments'
     # Spider setings
     custom_settings = {
-        'AUTOTHROTTLE_TARGET_CONCURRENCY': 3.0
+        'AUTOTHROTTLE_TARGET_CONCURRENCY': 6.0
     }
 
 
@@ -39,6 +40,9 @@ class ApiPageAssessments(ApiSpider):
         ns = fields.Int(missing=0, strict=False)
         palimit = fields.Int(missing=50, strict=False, validate=[
             lambda x: 0 < x <= 50
+        ])
+        pagelimit = fields.Int(missing=10, strict=False, validate=[
+            lambda x: 0 < x <= 20
         ])
         pasubprojects = \
             fields.Bool(missing=True, truthy=('yes', 'true'), falsy=('no', 'false'))
@@ -62,10 +66,12 @@ class ApiPageAssessments(ApiSpider):
             { '$match': query },
             { '$project': { '_id': 1 } }
         )
+        cursor = list(cursor)
         params = { 'palimit': self.args.palimit }
         if self.args.pasubprojects:
             params['pasubprojects'] = 'true'
-        for chunk in chunked(cursor, n=self.args.palimit):
+
+        for chunk in chunked(cursor, n=self.args.pagelimit):
             url = self.make_query(
                 prop='pageassessments',
                 pageids='|'.join(str(doc['_id']) for doc in chunk),
@@ -76,9 +82,22 @@ class ApiPageAssessments(ApiSpider):
     def start_requests(self):
         yield from self.make_start_requests()
 
+    def modify_url(self, url, **kwds):
+        url = unquote(url)
+        parsed = urlparse(url)
+        query = {
+            k:v for k, v in (
+                param.split('=') for param in parsed.query.split('&')
+            )
+        }
+        query.update(**kwds)
+        url = self.make_query(**query)
+        return unquote(url)
+
     def parse(self, response):
         data = super().parse(response)
         pages = list(jmp.search('query.pages', data).values())
+        pacontinue = jmp.search('continue.pacontinue', data)
         for page in pages:
             if 'missing' in page:
                 continue
@@ -90,4 +109,7 @@ class ApiPageAssessments(ApiSpider):
                 'title': title,
                 'assessments': assessments
             }
+            if pacontinue:
+                url = self.modify_url(response.url, pacontinue=pacontinue)
+                yield Request(url)
             yield doc
