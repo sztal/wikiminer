@@ -6,10 +6,11 @@ attribute (aliased with `s` attribute).
 # pylint: disable=no-member,protected-access
 import re
 import json
+from collections import defaultdict
 import requests
 from more_itertools import chunked
 from tqdm import tqdm
-from pymongo import UpdateMany
+from pymongo import UpdateMany, UpdateOne
 from wikiminer import _
 from wikiminer.parsers.wiki import WikiParser
 
@@ -292,6 +293,61 @@ def get_direct_communication(filepath=None, **kwds):
             for doc in tqdm(cursor):
                 handle.write(json.dumps(doc, default=str)+"\n")
     return cursor
+
+
+def make_page_assessments(filepath, n=10000, reset=True, **kwds):
+    """Define page assessments objects on page documents.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to a file with page assessments stored as JSON lines.
+        One document per line.
+    n : int
+        Batch size for bulk updating.
+    reset: bool
+        Should current ``assessments`` objects be reset
+        before updating.
+    **kwds :
+        Passed to :py:meth:dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    if reset:
+        print("Resetting 'assessments' objects ...")
+        _.Page.objects(ns=0).update(set__assessments={}, multi=True)
+
+
+    print("Finding paged documents ...")
+    paged = defaultdict(lambda: 0)
+    with open(filepath, 'r') as stream:
+        for line in tqdm(stream):
+            doc = json.loads(line)
+            paged[doc['_id']] += 1
+
+    print("Updating documents ...")
+    paged = { k: {} for k, v in paged.items() if v > 1 }
+
+    def iter_docs():
+        with open(filepath, 'r') as stream:
+            for line in stream:
+                doc = json.loads(line)
+                if doc['_id'] in paged:
+                    if doc['assessments']:
+                        paged[doc['_id']].update(**doc['assessments'])
+                else:
+                    yield {
+                        '_id': doc['_id'],
+                        'assessments': doc['assessments']
+                    }
+        for k, v in paged.items():
+            yield { '_id': k, 'assessments': v or {} }
+
+    ops = map(
+        lambda doc: _.Page._.dct_to_update(doc, upsert=False),
+        iter_docs()
+    )
+    for info in _.Page._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
 
 
 def get_page_assessments(filepath=None, **kwds):
