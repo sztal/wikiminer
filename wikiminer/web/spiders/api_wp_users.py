@@ -11,6 +11,27 @@ from . import ApiSpider
 from ... import _
 
 
+WP_USER_TITLE_PHRASES_BLACKLIST = (
+    'article alerts',
+    'deletion sorting',
+    'new articles',
+    'unreferenced BLP',
+    'article request',
+    'requested articles'
+)
+WP_USER_PROJECT_BLACKLIST = (
+    'Spam',
+    'Directory',
+    'Abandoned Drafts',
+    'Articles for creation',
+    'Guild of Copy Editors',
+    'Quality Article Improvement',
+    'Council',
+    'Editor Retention',
+    'Stub sorting'
+)
+
+
 class ApiWpUsers(ApiSpider):
     """API spider for getting user data for WikiProject members.
 
@@ -58,14 +79,21 @@ class ApiWpUsers(ApiSpider):
 
     def make_start_requests(self, **kwds):
         bots = self.get_bots()
+        rx_title_blacklist = re.compile(
+            r"|".join(WP_USER_TITLE_PHRASES_BLACKLIST),
+            re.IGNORECASE
+        )
+
         cursor = _.WikiProjectPage.objects.aggregate(
             { '$match': {
                 '_cls': _.WikiProjectPage._class_name,
-                'ns': { '$in': [ 4 ] }
+                'ns': { '$in': [ 4 ] },
+                'title': { '$not': rx_title_blacklist },
+                'wp': { '$nin': list(WP_USER_PROJECT_BLACKLIST) }
             } },
-            { '$unwind': '$posts' },
+            { '$unwind': '$users' },
             { '$group': {
-                '_id': '$posts.user_name',
+                '_id': '$users',
                 'wp': { '$addToSet': '$wp' }
             } },
             { '$project': {
