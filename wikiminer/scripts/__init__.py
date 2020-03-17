@@ -193,17 +193,17 @@ def make_user_pages(n=10000, update_kws=None, **kwds):
         print(info)
 
 
-def parse_posts(model, cursor, n=5000, update_kws=None, **kwds):
+def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
     """Parse posts from pages' content and update them in the databse.
 
     Parameters
     ----------
-    model : interfaced mongoengine collection
-        :py:class:`mongoengine.Document` with
-        :py:class:`dzeta.db.mongo.MongoModelInterface`.
     cursor : pymongo.command_cursor.CommandCursor
         Cursor for iterating over documents.
         Documents must contain `_id` and `source_text` fields.
+    model : interfaced mongoengine collection
+        :py:class:`mongoengine.Document` with
+        :py:class:`dzeta.db.mongo.MongoModelInterface`.
     n : int
         Batch size for updating.
         Full batch if falsy or non-positive.
@@ -231,6 +231,41 @@ def parse_posts(model, cursor, n=5000, update_kws=None, **kwds):
         return op
 
     ops = filter(None, map(make_update_op, cursor))
+    for info in model._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+
+
+def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
+    """Parse user shortcodes from pages' code and update them in the database.
+
+    Parameters
+    ----------
+    cursor : pymongo.command_cursor.CommandCursor
+        Cursor for iterating over documents.
+        Documents must contain `_id` and `source_text` fields.
+    model : interfaced mongoengine collection
+        :py:class:`mongoengine.Document` with
+        :py:class:`dzeta.db.mongo.MongoModelInterface`.
+    n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    update_kws : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.to_update`.
+    **kwds :
+        Passed to :py:meth:dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+
+    def make_update_op(doc):
+        parser = WikiParser(doc.get('source_text', ''))
+        users = list(parser.parse_user_shortcodes())
+        dct = dict(_id=doc['_id'], users=users)
+        op = model._.dct_to_update(dct, **update_kws)
+        return op
+
+    ops = tqdm(filter(None, map(make_update_op, cursor)))
     for info in model._.bulk_write(ops, n=n, **kwds):
         info.pop('upserted', None)
         print(info)

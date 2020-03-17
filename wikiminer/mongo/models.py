@@ -101,7 +101,11 @@ class Page(Document):
     popularity_score : FloatField
         Page popularity score.
     assessments : ListField(DictField)
-        Page assessments
+        Page assessments.
+    posts : EmbeddedDocumentListField(Post)
+        Users' posts on the page.
+    users : ListField(StringField)
+        Users who posted or left their shortcodes on the page.
     """
     _id = IntField(primary_key=True, alias='pageid')
     ns = IntField(required=True)
@@ -115,6 +119,7 @@ class Page(Document):
     popularity_score = FloatField()
     assessments = ListField(DictField(), default=list)
     posts = EmbeddedDocumentListField(Post, default=list)
+    users = ListField(StringField(), default=list)
     # Settings
     meta = {
         'collection': 'wm_pages',

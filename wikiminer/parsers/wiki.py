@@ -3,6 +3,7 @@ import re
 import html
 import unicodedata
 import attr
+from more_itertools import unique_everseen
 from dzeta.utils import parse_date
 
 
@@ -38,6 +39,11 @@ class WikiParser:
         "%d %b %Y",
         "%B %d, %Y at %H:%M:%S"
     )
+    _rx_user_code = re.compile(
+        r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<username>[^\{\}\[\]\|#/]+)",
+        re.IGNORECASE
+    )
+
 
     # Instance attributes
     source = attr.ib(converter=str)
@@ -73,3 +79,17 @@ class WikiParser:
                 'content': msg
             }
             yield dct
+
+    def parse_user_shortcodes(self):
+        """Parse user shortcodes from the source."""
+        def _iter():
+            for match in self._rx_user_code.finditer(self.source):
+                user_name = match.group('username')
+                if user_name:
+                    user_name = user_name.strip()
+                if not user_name:
+                    continue
+                user_name = self._normalize_user_name(user_name)
+                yield user_name
+
+        yield from unique_everseen(_iter())
