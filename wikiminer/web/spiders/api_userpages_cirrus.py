@@ -27,6 +27,7 @@ class ApiUserpagesCirrus(ApiSpider):
         Should only data for pages without cirrus data be fetched.
     """
     name = 'api_userpages_cirrus'
+    current_pids = []
 
     class Args(Schema):
         ns = fields.Int(missing=2, strict=False, validate=[
@@ -93,6 +94,9 @@ class ApiUserpagesCirrus(ApiSpider):
             except (KeyError, IndexError):
                 continue
             source = cirrus['source']
+            user_name = meta['user_name']
+            if user_name.endswith('/'):
+                user_name = user_name[:-1]
             page.update(
                 user_name=response.meta['user_name'],
                 page_type=cirrus['type'],
@@ -111,8 +115,13 @@ class ApiUserpagesCirrus(ApiSpider):
             } }
         )
         for doc in cursor:
-            request = self.make_ap_request(apprefix=doc['user_name'])
-            yield request
+            request_main = self.make_ap_request(
+                apprefix=doc['user_name'],
+                apto=doc['user_name']
+            )
+            request_sub = self.make_ap_request(apprefix=doc['user_name']+'/')
+            yield request_main
+            yield request_sub
 
     def start_requests(self):
         yield from self.make_start_requests()
