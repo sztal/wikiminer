@@ -17,7 +17,8 @@ WP_USER_TITLE_PHRASES_BLACKLIST = (
     'new articles',
     'unreferenced BLP',
     'article request',
-    'requested articles'
+    'requested articles',
+    '/top[^/]*?editors'
 )
 WP_USER_PROJECT_BLACKLIST = (
     'Spam',
