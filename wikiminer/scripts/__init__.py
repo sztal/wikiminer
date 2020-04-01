@@ -287,6 +287,7 @@ def get_direct_communication(filepath=None, **kwds):
         '_id': 0,
         'user_id': '$_id',
         'user_name': 1,
+        'edit_count': '$editcount',
         'emailable': 1,
         'gender': 1,
         'wp': 1,
