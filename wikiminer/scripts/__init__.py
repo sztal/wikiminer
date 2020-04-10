@@ -236,6 +236,47 @@ def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
         print(info)
 
 
+def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
+    """Parse talk threads from pages' content and update them in the database.
+
+    Parameters
+    ----------
+    cursor : pymong.command_cursor.CommandCursor
+        Cursor for iterating over documents.
+        Documents must contain `_id` and `source_text` fields.
+    model : interfaced mongoengine collection
+        :py:class:`mongoending.Document` with
+        :py:class:`dzeta.db.mongo.MongoModelInterface`.
+    n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    update_kwds : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+    counter = 0
+
+    def make_update_op(doc):
+        parser = WikiParser(doc.get('source_text', ''))
+        nonlocal counter
+        counter += 1
+        _id = doc['_id']
+        print(f"\rItem {counter}|id={_id}", end="")
+        threads = list(parser.parse_talk_threads())
+        dct = {
+            '_id': _id,
+            'threads': threads
+        }
+        op = model._.dct_to_update(dct, **update_kws)
+        return op
+
+    ops = filter(None, map(make_update_op, cursor))
+    for info in model._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+
+
 def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
     """Parse user shortcodes from pages' code and update them in the database.
 
@@ -329,6 +370,38 @@ def get_direct_communication(filepath=None, **kwds):
             for doc in tqdm(cursor):
                 handle.write(json.dumps(doc, default=str)+"\n")
     return cursor
+
+
+def get_wp_talk_threads(filepath, ns=(5,), **kwds):
+    """Get talk threads from WP pages.
+
+    Parameters
+    ----------
+    filepath : str
+        Filepath to save data at. Format is JSON lines.
+    ns : tuple of int
+        Namespaces to use (``4`` and/or ``5``).
+        By default only talk is gathered.
+    **kwds :
+        Additional options for the aggregation pipeline.
+    """
+    cursor = _.WikiProjectPage.objects.aggregate(
+        { '$match': {
+            'ns': { '$in': ns }
+        } },
+        { '$project': {
+            '_id': 0,
+            'page_id': '$_id',
+            'title': 1,
+            'ns': 1,
+            'wp': 1,
+            'threads': 1
+        } },
+        **kwds
+    )
+    with open(filepath, 'x') as f:
+        for doc in tqdm(cursor):
+            f.write(json.dumps(doc, default=str)+"\n")
 
 
 def make_page_assessments(filepath, n=10000, reset=True, **kwds):

@@ -119,6 +119,7 @@ class Page(Document):
     popularity_score = FloatField()
     assessments = ListField(DictField(), default=list)
     posts = EmbeddedDocumentListField(Post, default=list)
+    threads = ListField(DictField(), default=list)
     users = ListField(StringField(), default=list)
     # Settings
     meta = {
