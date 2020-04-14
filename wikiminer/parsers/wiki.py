@@ -19,15 +19,20 @@ class WikiParser:
     # Class attributes
     _rx_msg = re.compile(
         r"(?P<msg>(?<=\n).*)"
-        r"(?P<sig>\[\[User( talk)?:.*?(UTC))",
+        # r"(?P<sig>[\[\{]{2}User([ _]talk)?:.*?[\]\}]{2}.*?\(...\))"
+        r"(?P<sig>"
+        r"(\[\[User([ _]talk)?:[^\[\]]*?\]\]"
+        r"|\{\{User([ _]talk)?:[^\{\}]*?\}\})"
+        r".*?\(...\))"
+        ,
         re.IGNORECASE
     )
     _rx_sig = re.compile(
-        r"(?P<username>(?<=:).*?(?=[\/#\|\]]))"
+        r"(?P<user>(?<=:).*?(?=[\]\}\|#/\\]))"
         r".*?"
-        r"(?P<ts>(\d\d:\d\d)?,?\s*?(\d\d?\s+?[a-z]+\s+?\d{4}|\d{4}\s+?[a-z]+\s+?\d\d?))"
-        r".*?"
-        r"(?P<tz>...$)",
+        r"(?P<ts>\d+:\d+.*?(?=\(...\)))"
+        r"(?P<tz>\(...\))"
+        ,
         re.IGNORECASE
     )
     _rx_name = re.compile(r"^User( talk)?:\s*", re.IGNORECASE)
@@ -35,12 +40,14 @@ class WikiParser:
     _date_formats = (
         "%H:%M, %d %B %Y",
         "%H:%M, %d %b %Y",
+        "%H:%M, %B %d, %Y",
         "%d %B %Y",
         "%d %b %Y",
-        "%B %d, %Y at %H:%M:%S"
+        "%B %d, %Y at %H:%M:%S",
+        "%H:%M:%S, %Y-%m-%d"
     )
     _rx_user_code = re.compile(
-        r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<username>[^\{\}\[\]\|#/]+)",
+        r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<user>[^\{\}\[\]\|#/]+)",
         re.IGNORECASE
     )
 
@@ -76,10 +83,11 @@ class WikiParser:
             if not sig:
                 continue
             try:
-                ts = parse_date(sig.group('ts'), date_formats=self._date_formats)
-            except OverflowError:
-                continue
-            user_name = sig.group('username')
+                ts = sig.group('ts').strip()
+                ts = parse_date(ts, date_formats=self._date_formats)
+            except (OverflowError, TypeError):
+                ts = None
+            user_name = sig.group('user')
             if not user_name:
                 continue
             dct = {
@@ -93,7 +101,7 @@ class WikiParser:
         """Parse user shortcodes from the source."""
         def _iter():
             for match in self._rx_user_code.finditer(self.source):
-                user_name = match.group('username')
+                user_name = match.group('user')
                 if user_name:
                     user_name = user_name.strip()
                 if not user_name:
@@ -133,6 +141,7 @@ class WikiParser:
 
         posts = self.parse_posts(remove_comments=remove_comments)
         posts = map(lambda p: { **p, 'replies': [] }, posts)
+        parent = None
         try:
             parent = next(posts)
             while True:
@@ -141,4 +150,5 @@ class WikiParser:
                 yield parent
                 parent = next_parent
         except StopIteration:
-            return
+            if parent:
+                yield parent
