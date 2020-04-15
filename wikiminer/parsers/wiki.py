@@ -1,10 +1,12 @@
 """Wikipedia parser."""
 import re
+from datetime import datetime
 import html
 import unicodedata
 import attr
+from dateutil.parser import parse as parse_date
 from more_itertools import unique_everseen
-from dzeta.utils import parse_date
+# from dzeta.utils import parse_date
 
 
 @attr.s
@@ -30,7 +32,7 @@ class WikiParser:
     _rx_sig = re.compile(
         r"(?P<user>(?<=:).*?(?=[\]\}\|#/\\]))"
         r".*?"
-        r"(?P<ts>\d+:\d+.*?(?=\(...\)))"
+        r"(?P<ts>(\d+:\d+|\d\s\w|\w+\s+\d+,?\s*\d{4})[\s\w\d:,;]*?(?=\(...\)))"
         r"(?P<tz>\(...\))"
         ,
         re.IGNORECASE
@@ -41,15 +43,34 @@ class WikiParser:
         "%H:%M, %d %B %Y",
         "%H:%M, %d %b %Y",
         "%H:%M, %B %d, %Y",
+        "%H:%M, %b %d, %Y",
+        "%H:%M %B %d %Y",
+        "%H:%M %b %d %Y",
         "%d %B %Y",
         "%d %b %Y",
         "%B %d, %Y at %H:%M:%S",
-        "%H:%M:%S, %Y-%m-%d"
+        "%H:%M:%S, %Y-%m-%d",
+        "%H:%M %Z %d %B %Y",
+        "%H:%M, %b %d, %Y",
+        "%H:%M, %Y %B %d",
+        "%d %B %Y %H:%M",
+        "%d %b %Y %H:%M",
+        "%H:%M, %Y %b %d",
+        "%H:%M, %Y %B %d",
+        "%B %d, %Y %H:%M",
+        "%B %d %Y %H:%M",
+        "%b %d, %Y %H:%M",
+        "%b %d %Y %H:%M"
     )
     _rx_user_code = re.compile(
         r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<user>[^\{\}\[\]\|#/]+)",
         re.IGNORECASE
     )
+    _rx_tz = re.compile(r"\(...\)")
+    _rx_word = re.compile(r"\w+", re.IGNORECASE)
+    _rx_day = re.compile(r"\d{1,2}")
+    _rx_year = re.compile(r"\d{4}")
+    _rx_time = re.compile(r"\d\d(:\d\d){1,2}")
 
 
     # Instance attributes
@@ -62,9 +83,25 @@ class WikiParser:
         s = html.unescape(x.strip())
         s = self._remove_format_control(s)
         s = self._rx_name.sub(r"", s)
-        s = (s[:1].upper() + s[1:])
+        s = s.capitalize()
+        # s = (s[:1].upper() + s[1:])
         s = self._rx_ws.sub(r" ", s)
         return s.strip()
+
+    def _parse_date(self, dt):
+        exc = None
+        for fmt in self._date_formats:
+            try:
+                return datetime.strptime(dt, fmt)
+            except ValueError:
+                continue
+        # import ipdb; ipdb.set_trace()
+        try:
+            dt = parse_date(dt, ignoretz=True)
+            # import ipdb; ipdb.set_trace()
+            return dt
+        except (OverflowError, TypeError, ValueError):
+            return None
 
     def parse_posts(self, remove_comments=False):
         """Parse posts from the source.
@@ -82,16 +119,15 @@ class WikiParser:
             sig = self._rx_sig.search(match.group('sig'))
             if not sig:
                 continue
-            try:
-                ts = sig.group('ts').strip()
-                ts = parse_date(ts, date_formats=self._date_formats)
-            except (OverflowError, TypeError):
-                ts = None
+            ts = sig.group('ts').strip()
+            ts = self._parse_date(ts)
+            # ts = parse_date(ts, date_formats=self._date_formats)
             user_name = sig.group('user')
             if not user_name:
                 continue
             dct = {
                 'user_name': self._normalize_user_name(user_name),
+                # 'user_name': user_name,
                 'timestamp': ts,
                 'content': msg
             }

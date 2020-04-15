@@ -214,14 +214,11 @@ def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
         Passed to :py:meth:dzeta.db.mongo.MongoModelInterface.bulk_write`.
     """
     update_kws = update_kws or {}
-    counter = 0
 
-    def make_update_op(doc):
+    def make_update_op(doc, pbar):
+        pbar.set_postfix({ '_id': str(doc['_id']) })
         parser = WikiParser(doc.get('source_text', ''))
-        nonlocal counter
-        counter += 1
         _id = doc['_id']
-        print(f"\rItem {counter}|id={_id}", end="")
         posts = list(parser.parse_posts())
         dct = {
             '_id': _id,
@@ -230,7 +227,11 @@ def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
         op = model._.dct_to_update(dct, **update_kws)
         return op
 
-    ops = filter(None, map(make_update_op, cursor))
+    cursor = tqdm(cursor.batch_size(n))
+    ops = filter(None, map(
+        lambda x: make_update_op(x, cursor),
+        cursor
+    ))
     for info in model._.bulk_write(ops, n=n, **kwds):
         info.pop('upserted', None)
         print(info)
@@ -255,14 +256,11 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
         :py:meth:`dzeta.db.mongo.MongoModelInterface.bulk_write`.
     """
     update_kws = update_kws or {}
-    counter = 0
 
-    def make_update_op(doc):
+    def make_update_op(doc, pbar):
+        pbar.set_postfix({ '_id': str(doc['_id']) })
         parser = WikiParser(doc.get('source_text', ''))
-        nonlocal counter
-        counter += 1
         _id = doc['_id']
-        print(f"\rItem {counter}|id={_id}", end="")
         threads = list(parser.parse_talk_threads())
         dct = {
             '_id': _id,
@@ -271,7 +269,11 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
         op = model._.dct_to_update(dct, **update_kws)
         return op
 
-    ops = filter(None, map(make_update_op, cursor))
+    cursor = tqdm(cursor)
+    ops = filter(None, map(
+        lambda x: make_update_op(x, cursor),
+        cursor
+    ))
     for info in model._.bulk_write(ops, n=n, **kwds):
         info.pop('upserted', None)
         print(info)
