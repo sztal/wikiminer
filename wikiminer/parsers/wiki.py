@@ -84,7 +84,6 @@ class WikiParser:
         s = self._remove_format_control(s)
         s = self._rx_name.sub(r"", s)
         s = s.capitalize()
-        # s = (s[:1].upper() + s[1:])
         s = self._rx_ws.sub(r" ", s)
         return s.strip()
 
@@ -95,10 +94,8 @@ class WikiParser:
                 return datetime.strptime(dt, fmt)
             except ValueError:
                 continue
-        # import ipdb; ipdb.set_trace()
         try:
             dt = parse_date(dt, ignoretz=True)
-            # import ipdb; ipdb.set_trace()
             return dt
         except (OverflowError, TypeError, ValueError):
             return None
@@ -121,13 +118,11 @@ class WikiParser:
                 continue
             ts = sig.group('ts').strip()
             ts = self._parse_date(ts)
-            # ts = parse_date(ts, date_formats=self._date_formats)
             user_name = sig.group('user')
             if not user_name:
                 continue
             dct = {
                 'user_name': self._normalize_user_name(user_name),
-                # 'user_name': user_name,
                 'timestamp': ts,
                 'content': msg
             }

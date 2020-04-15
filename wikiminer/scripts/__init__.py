@@ -7,6 +7,7 @@ attribute (aliased with `s` attribute).
 import re
 import json
 from collections import defaultdict
+from collections.abc import Sequence
 import requests
 from more_itertools import chunked
 from tqdm import tqdm
@@ -374,20 +375,22 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_wp_talk_threads(filepath, ns=(5,), **kwds):
+def get_talk_threads(filepath, model, ns, **kwds):
     """Get talk threads from WP pages.
 
     Parameters
     ----------
     filepath : str
         Filepath to save data at. Format is JSON lines.
-    ns : tuple of int
+    ns : int or tuple of int
         Namespaces to use (``4`` and/or ``5``).
         By default only talk is gathered.
     **kwds :
         Additional options for the aggregation pipeline.
     """
-    cursor = _.WikiProjectPage.objects.aggregate(
+    if not isinstance(ns, Sequence):
+        ns = (ns,)
+    cursor = model.objects.aggregate(
         { '$match': {
             'ns': { '$in': ns }
         } },
@@ -397,6 +400,7 @@ def get_wp_talk_threads(filepath, ns=(5,), **kwds):
             'title': 1,
             'ns': 1,
             'wp': 1,
+            'user_name': 1,
             'threads': 1
         } },
         **kwds
