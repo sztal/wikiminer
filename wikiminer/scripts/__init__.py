@@ -8,6 +8,7 @@ import re
 import json
 from collections import defaultdict
 from collections.abc import Sequence
+from itertools import chain
 import requests
 from more_itertools import chunked
 from tqdm import tqdm
@@ -376,7 +377,7 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_talk_threads(filepath, model, ns, match=None, **kwds):
+def get_talk_threads(filepath, model, ns, match=None, sequences=False, **kwds):
     """Get talk threads from WP pages.
 
     Parameters
@@ -388,6 +389,10 @@ def get_talk_threads(filepath, model, ns, match=None, **kwds):
         By default only talk is gathered.
     match: dict, optional
         Additional `$match` stage conditions.
+    sequences : bool
+        Should sequences be returned instead of raw threads.
+        Sequences rearrange and duplicate data so for every path
+        from a root to a leaf the full path is returned.
     **kwds :
         Additional options for the aggregation pipeline.
     """
@@ -409,6 +414,31 @@ def get_talk_threads(filepath, model, ns, match=None, **kwds):
                 # if thread:
                 yield from unwind_subthreads(thread, idx)
 
+    def unwind_sequences(threads):
+        path = []
+        threads = map(lambda dct: {
+            'page_id': dct['page_id'],
+            'topic': dct['topic'],
+            'idx': dct['idx']
+        }, threads)
+        for thread in threads:
+            same_topic = bool(path) and \
+                thread['page_id'] == path[-1]['page_id'] and \
+                thread['topic'] == path[-1]['topic']
+
+            if not same_topic or not thread['idx'].startswith(path[-1]['idx']):
+                yield from path
+                if same_topic:
+                    path = [
+                        t for t in path
+                        if thread['idx'].startswith(t['idx'])
+                    ]
+                else:
+                    path = []
+            path.append(thread)
+
+        yield from path
+
     if not isinstance(ns, Sequence):
         ns = (ns,)
     cursor = model.objects.aggregate(
@@ -429,7 +459,10 @@ def get_talk_threads(filepath, model, ns, match=None, **kwds):
         } },
         **kwds
     )
+
     cursor = unwind_threads(cursor)
+    if sequences:
+        cursor = unwind_sequences(cursor)
     with open(filepath, 'x') as f:
         for doc in tqdm(cursor):
             f.write(json.dumps(doc, default=str)+"\n")
