@@ -104,6 +104,9 @@ class Page(Document):
         Page assessments.
     posts : EmbeddedDocumentListField(Post)
         Users' posts on the page.
+    threads : EmbeddedDocumentListField(DictField)
+        Discussion threads on the page.
+        Well-defined only for talk pages.
     users : ListField(StringField)
         Users who posted or left their shortcodes on the page.
     """

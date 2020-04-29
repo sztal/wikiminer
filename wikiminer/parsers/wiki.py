@@ -3,14 +3,12 @@ import re
 from datetime import datetime
 import html
 import unicodedata
-import attr
 from dateutil.parser import parse as parse_date
 from more_itertools import unique_everseen
 # from dzeta.utils import parse_date
 
 
-@attr.s
-class WikiParser:
+class WikiParserPost:
     """Wikipedia parser.
 
     Attributes
@@ -67,14 +65,15 @@ class WikiParser:
         re.IGNORECASE
     )
     _rx_tz = re.compile(r"\(...\)")
-    _rx_word = re.compile(r"\w+", re.IGNORECASE)
-    _rx_day = re.compile(r"\d{1,2}")
-    _rx_year = re.compile(r"\d{4}")
-    _rx_time = re.compile(r"\d\d(:\d\d){1,2}")
+    _rx_html_tag = re.compile(r"</?.*?>", re.IGNORECASE)
 
 
-    # Instance attributes
-    source = attr.ib(converter=str)
+    def __init__(self, source):
+        """Initialization method."""
+        self.source = self._remove_html_tags(str(source))
+
+    def _remove_html_tags(self, x):
+        return self._rx_html_tag.sub(r"", x)
 
     def _remove_format_control(self, x):
         return "".join(c for c in x if unicodedata.category(c) != 'Cf')

@@ -13,7 +13,8 @@ from more_itertools import chunked
 from tqdm import tqdm
 from pymongo import UpdateMany, UpdateOne
 from wikiminer import _
-from wikiminer.parsers.wiki import WikiParser
+from wikiminer.parsers.wiki import WikiParserPost
+from wikiminer.parsers.threads import WikiParserThreads
 
 
 def docs_from_json(path, model, n=5000, update_kws=None, **kwds):
@@ -218,7 +219,7 @@ def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
 
     def make_update_op(doc, pbar):
         pbar.set_postfix({ '_id': str(doc['_id']) })
-        parser = WikiParser(doc.get('source_text', ''))
+        parser = WikiParserPost(doc.get('source_text', ''))
         _id = doc['_id']
         posts = list(parser.parse_posts())
         dct = {
@@ -260,9 +261,9 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
 
     def make_update_op(doc, pbar):
         pbar.set_postfix({ '_id': str(doc['_id']) })
-        parser = WikiParser(doc.get('source_text', ''))
+        parser = WikiParserThreads(doc.get('source_text', ''))
         _id = doc['_id']
-        threads = list(parser.parse_talk_threads())
+        threads = list(parser.parse_threads())
         dct = {
             '_id': _id,
             'threads': threads
@@ -303,7 +304,7 @@ def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
     update_kws = update_kws or {}
 
     def make_update_op(doc):
-        parser = WikiParser(doc.get('source_text', ''))
+        parser = WikiParserPost(doc.get('source_text', ''))
         users = list(parser.parse_user_shortcodes())
         dct = dict(_id=doc['_id'], users=users)
         op = model._.dct_to_update(dct, **update_kws)
@@ -375,7 +376,7 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_talk_threads(filepath, model, ns, **kwds):
+def get_talk_threads(filepath, model, ns, match=None, **kwds):
     """Get talk threads from WP pages.
 
     Parameters
@@ -385,26 +386,50 @@ def get_talk_threads(filepath, model, ns, **kwds):
     ns : int or tuple of int
         Namespaces to use (``4`` and/or ``5``).
         By default only talk is gathered.
+    match: dict, optional
+        Additional `$match` stage conditions.
     **kwds :
         Additional options for the aggregation pipeline.
     """
+    def unwind_threads(cursor):
+        def unwind_subthreads(thread, idx):
+            subthreads = thread.pop('subthreads', [])
+            thread = {
+                **doc,
+                'idx': str(idx),
+                **thread
+            }
+            yield thread
+            for i, sub in enumerate(subthreads, 1):
+                # if sub:
+                yield from unwind_subthreads(sub, idx=f"{idx}.{i}")
+        for doc in cursor:
+            threads = doc.pop('threads', [])
+            for idx, thread in enumerate(threads, 1):
+                # if thread:
+                yield from unwind_subthreads(thread, idx)
+
     if not isinstance(ns, Sequence):
         ns = (ns,)
     cursor = model.objects.aggregate(
         { '$match': {
-            'ns': { '$in': ns }
+            '_cls': model._class_name,
+            'ns': { '$in': ns },
+            **(match or {})
         } },
+        { '$unwind': '$threads' },
         { '$project': {
             '_id': 0,
             'page_id': '$_id',
-            'title': 1,
             'ns': 1,
             'wp': 1,
-            'user_name': 1,
-            'threads': 1
+            'title': 1,
+            'topic': '$threads.topic',
+            'threads': '$threads.threads'
         } },
         **kwds
     )
+    cursor = unwind_threads(cursor)
     with open(filepath, 'x') as f:
         for doc in tqdm(cursor):
             f.write(json.dumps(doc, default=str)+"\n")
