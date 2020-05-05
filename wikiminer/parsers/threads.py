@@ -6,13 +6,13 @@ from . import WikiParser, WikiParserRX
 class WikiParserThreadsRX(WikiParserRX):
     """Container-class with pre-compiled regex objects."""
     thread = re.compile(r"(^\s*)(?==)", re.IGNORECASE | re.MULTILINE)
-    subthreads = re.compile(r"(?<=\([A-Z]{3}\))\s*", re.IGNORECASE)
+    subthreads = re.compile(r"(?<=\(UTC\))\s*", re.IGNORECASE)
     topic = re.compile(r"^=+(?P<topic>.*?)=+", re.IGNORECASE)
     # Signature
     signature = re.compile(
         r"(\[\[|\{\{)User([ _]talk)?:[^\[\]\{\}]*?(\]\]|\}\})"
-        r"[^\[\]\{\}]*?"
-        r"\([A-Z]{3}\)\s*$",
+        r".*?"
+        r"\(UTC\)\s*$",
         re.IGNORECASE | re.MULTILINE
     )
     user = re.compile(
@@ -22,14 +22,14 @@ class WikiParserThreadsRX(WikiParserRX):
     )
     timestamp = re.compile(
         r"(?P<ts>(?<=\s)[\w\d:\.,-/\s]*?)"
-        r"[\s\W]*\([A-Z]{3}\)\s*$",
+        r"[\s\W]*\(UTC\)\s*$",
         re.IGNORECASE
     )
     # Helpers
     header_start = re.compile(r"^\s*=+", re.IGNORECASE)
     depth = re.compile(r"^[:\*]+")
     outdent = re.compile(r"^\{\{(outdent|od\||od2).*?\}\}", re.IGNORECASE)
-    tz_trail = re.compile(r"(?<=\([A-Z]{3}\)).*(\n|$)", re.IGNORECASE)
+    tz_trail = re.compile(r"(?<=\(UTC\)).*(\n|$)", re.IGNORECASE)
 
 
 class WikiParserThreads(WikiParser):
@@ -113,11 +113,11 @@ class WikiParserThreads(WikiParser):
         if sig:
             sig = sig.group()
             content = self.rx.signature.sub(r"", content).strip()
-            user = self.rx.user.search(sig)
+            user = self.rx.user.finditer(sig)
             timestamp = self.rx.timestamp.search(sig)
 
             if user is not None:
-                user = user.group('user').strip()
+                user = [ m.group('user').strip() for m in user ].pop()
                 user = self.sanitize_user_name(user)
             if timestamp is not None:
                 timestamp = timestamp.group('ts').strip()
