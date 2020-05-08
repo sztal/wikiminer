@@ -6,14 +6,18 @@ from . import WikiParser, WikiParserRX
 class WikiParserThreadsRX(WikiParserRX):
     """Container-class with pre-compiled regex objects."""
     thread = re.compile(r"(^\s*)(?==)", re.IGNORECASE | re.MULTILINE)
-    subthreads = re.compile(r"(?<=\(UTC\))\s*", re.IGNORECASE)
+    subthreads = re.compile(r"(?<=\(UTC\))$", re.IGNORECASE | re.MULTILINE)
     topic = re.compile(r"^=+(?P<topic>.*?)=+", re.IGNORECASE)
     # Signature
     signature = re.compile(
         r"(\[\[|\{\{)User([ _]talk)?:[^\[\]\{\}]*?(\]\]|\}\})"
         r".*?"
         r"\(UTC\)\s*$",
-        re.IGNORECASE | re.MULTILINE
+        re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+    sigstart = re.compile(
+        r".*?:(klat[ _])?resU(\[\[|\{\{)",
+        re.IGNORECASE | re.MULTILINE | re.DOTALL
     )
     user = re.compile(
         r"(\[\[|\{\{)User([ _]talk)?:"
@@ -27,9 +31,11 @@ class WikiParserThreadsRX(WikiParserRX):
     )
     # Helpers
     header_start = re.compile(r"^\s*=+", re.IGNORECASE)
-    depth = re.compile(r"^[:\*]+")
+    header = re.compile(r"^\s*=+.*?=+", re.IGNORECASE)
+    # depth = re.compile(r"^[:\*]+")
+    depth = re.compile(r"^:+")
     outdent = re.compile(r"^\{\{(outdent|od\||od2).*?\}\}", re.IGNORECASE)
-    tz_trail = re.compile(r"(?<=\(UTC\)).*(\n|$)", re.IGNORECASE)
+    tz_trail = re.compile(r"^.*?(?=\)CTU\()", re.IGNORECASE | re.MULTILINE)
 
 
 class WikiParserThreads(WikiParser):
@@ -55,7 +61,9 @@ class WikiParserThreads(WikiParser):
         """Iterate over threads in `source`."""
         for thread in self.rx.thread.split(self.source):
             thread = thread.strip()
-            thread = self.rx.tz_trail.sub(r"", thread)
+            if not thread:
+                continue
+            thread = self.rx.tz_trail.sub(r"", thread[::-1])[::-1]
             if thread and thread.startswith('='):
                 thread = self.parse_thread(thread)
                 thread = self.postprocess_thread(thread)
@@ -82,7 +90,8 @@ class WikiParserThreads(WikiParser):
             thread = None
 
         while thread:
-            if thread['depth'] == 0 and not thread.get('outdent'):
+            if not dct['threads'] \
+            or (thread['depth'] == 0 and not thread.get('outdent')):
                 dct['threads'].append(thread)
             thread = self._parse_subthreads(thread, threads)
 
@@ -111,14 +120,14 @@ class WikiParserThreads(WikiParser):
         sig = self.rx.signature.search(content)
 
         if sig:
-            sig = sig.group()
-            content = self.rx.signature.sub(r"", content).strip()
-            user = self.rx.user.finditer(sig)
+            sig = self.rx.sigstart.match(sig.group()[::-1])
+            content = content[:-sig.end()]
+            sig = sig.group()[::-1]
+            user = self.rx.user.search(sig)
             timestamp = self.rx.timestamp.search(sig)
 
             if user is not None:
-                user = [ m.group('user').strip() for m in user ].pop()
-                user = self.sanitize_user_name(user)
+                user = self.sanitize_user_name(user.group('user').strip())
             if timestamp is not None:
                 timestamp = timestamp.group('ts').strip()
                 timestamp = self.parse_date(timestamp)
@@ -167,13 +176,13 @@ class WikiParserThreads(WikiParser):
         int, str
             depth and subthread source string.
         """
-        for s in self.rx.subthreads.split(thread.strip()):
-            s = s.strip()
-            s = self.rx.header_start.sub(r"", s).strip()
-            if s:
+        for sub in self.rx.subthreads.split(thread.strip()):
+            sub = sub.strip()
+            sub = self.rx.header.sub(r"", sub).strip()
+            if sub:
                 yield {
-                    'content': s,
-                    'depth': self._count_depth(s),
+                    'content': sub,
+                    'depth': self._count_depth(sub),
                     'subthreads': []
                 }
 
