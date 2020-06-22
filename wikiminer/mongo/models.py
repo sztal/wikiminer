@@ -239,7 +239,7 @@ class Revision(Document):
     timestamp = DateTimeField(required=True)
     size = IntField(required=True, min=0)
     rev_size = IntField(null=True, default=None, required=False)
-    sha1 = StringField(required=True)
+    sha1 = StringField(null=True, default=None)
     comment = StringField(null=True)
     contentmodel = StringField(null=True)
     text = StringField(null=True, default=None)
