@@ -130,7 +130,7 @@ class ApiWpUsers(ApiSpider):
                 continue
             user['name'] = user['name']
             user['emailable'] = 'emailable' in user
-            user['wp'] = wp[user['name']]
+            user['wp'] = wp.get(user['name'], [])
             user['gender'] = {
                 'male': 'M',
                 'female': 'F'

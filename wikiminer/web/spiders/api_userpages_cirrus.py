@@ -94,11 +94,11 @@ class ApiUserpagesCirrus(ApiSpider):
             except (KeyError, IndexError):
                 continue
             source = cirrus['source']
-            user_name = meta['user_name']
+            user_name = response.meta['user_name']
             if user_name.endswith('/'):
                 user_name = user_name[:-1]
             page.update(
-                user_name=response.meta['user_name'],
+                user_name=user_name,
                 page_type=cirrus['type'],
                 source_text=source['source_text'],
                 template=source['template'],

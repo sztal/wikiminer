@@ -51,7 +51,8 @@ class ApiPagesCirrus(ApiSpider):
                 '$exists': False,
                 '$in': [ None, [] ]
             }
-        for chunk in chunked(_.Page.objects(__raw__=query).only('_id'), n=self.args.limit):
+        cursor = _.Page.objects(__raw__=query).only('_id').timeout(False)
+        for chunk in chunked(cursor, n=self.args.limit):
             url = self.make_query(
                 prop='cirrusdoc',
                 pageids='|'.join(str(doc.pk) for doc in chunk),
