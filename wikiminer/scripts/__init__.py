@@ -264,10 +264,10 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
         pbar.set_postfix({ '_id': str(doc['_id']) })
         parser = WikiParserThreads(doc.get('source_text', ''))
         _id = doc['_id']
-        threads = list(parser.parse_threads())
+        topics = list(parser.parse_threads())
         dct = {
             '_id': _id,
-            'threads': threads
+            'topics': topics
         }
         op = model._.dct_to_update(dct, **update_kws)
         return op
@@ -397,24 +397,29 @@ def get_talk_threads(filepath, model, ns, match=None, sequences=False, **kwds):
         Additional options for the aggregation pipeline.
     """
     def unwind_threads(cursor):
-        def unwind_subthreads(thread, idx):
-            subthreads = thread.pop('subthreads', [])
+        def unwind_subthreads(thread, idx, tid):
+            subthreads = thread.pop('subthreads', None) or []
             thread = {
                 **doc,
+                'tid': tid,
                 'idx': str(idx),
                 **thread
             }
             yield thread
             for i, sub in enumerate(subthreads, 1):
-                # if sub:
-                yield from unwind_subthreads(sub, idx=f"{idx}.{i}")
+                yield from unwind_subthreads(sub, idx=f"{idx}.{i}", tid=tid)
+        tid = 0
+        pid = None
         for doc in cursor:
-            threads = doc.pop('threads', [])
-            for idx, thread in enumerate(threads, 1):
-                # if thread:
-                yield from unwind_subthreads(thread, idx)
+            if pid is not None and pid != doc['page_id']:
+                tid = 0
+            tid += 1
+            post = doc.pop('post')
+            yield from unwind_subthreads(post, 0, tid=tid)
+            pid = doc['page_id']
 
     def unwind_sequences(threads):
+        raise NotImplementedError("see how 'unwind_threads' is implemented now")
         path = []
         threads = map(lambda dct: {
             'page_id': dct['page_id'],
@@ -447,15 +452,29 @@ def get_talk_threads(filepath, model, ns, match=None, sequences=False, **kwds):
             'ns': { '$in': ns },
             **(match or {})
         } },
-        { '$unwind': '$threads' },
+        { '$unwind': '$topics' },
+        { '$addFields': {
+            'topic': '$topics.topic',
+            'post': { '$arrayElemAt': [ '$topics.threads', 0 ] },
+            'threads': { '$slice': [ '$topics.threads', 1, 999999999 ] }
+        } },
         { '$project': {
             '_id': 0,
             'page_id': '$_id',
             'ns': 1,
             'wp': 1,
             'title': 1,
-            'topic': '$threads.topic',
-            'threads': '$threads.threads'
+            'topic': 1,
+            'post': {
+                'content': '$post.content',
+                'depth': '$post.depth',
+                'user_name': '$post.user_name',
+                'timestamp': '$post.timestamp',
+                'subthreads': { '$concatArrays': [
+                    '$post.subthreads',
+                    '$threads'
+                ] }
+            }
         } },
         **kwds
     )

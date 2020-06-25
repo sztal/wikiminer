@@ -104,8 +104,8 @@ class Page(Document):
         Page assessments.
     posts : EmbeddedDocumentListField(Post)
         Users' posts on the page.
-    threads : EmbeddedDocumentListField(DictField)
-        Discussion threads on the page.
+    topics : EmbeddedDocumentListField(DictField)
+        Discussion topics on the page.
         Well-defined only for talk pages.
     users : ListField(StringField)
         Users who posted or left their shortcodes on the page.
@@ -122,7 +122,7 @@ class Page(Document):
     popularity_score = FloatField()
     assessments = ListField(DictField(), default=list)
     posts = EmbeddedDocumentListField(Post, default=list)
-    threads = ListField(DictField(), default=list)
+    topics = ListField(DictField(), default=list)
     users = ListField(StringField(), default=list)
     # Settings
     meta = {
