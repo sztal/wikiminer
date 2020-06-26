@@ -249,7 +249,7 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
         Cursor for iterating over documents.
         Documents must contain `_id` and `source_text` fields.
     model : interfaced mongoengine collection
-        :py:class:`mongoending.Document` with
+        :py:class:`mongoengine.Document` with
         :py:class:`dzeta.db.mongo.MongoModelInterface`.
     n : int
         Batch size for updating.
