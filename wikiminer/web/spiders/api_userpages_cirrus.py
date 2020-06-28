@@ -108,12 +108,37 @@ class ApiUserpagesCirrus(ApiSpider):
             yield page
 
     def make_start_requests(self, **kwds):
-        cursor = _.User.objects.aggregate(
+        pipeline = [
             { '$project': {
                 '_id': 0,
                 'user_name': 1
             } }
-        )
+        ]
+        if self.args.missing_only:
+            pipeline += [
+                { '$lookup': {
+                    'from': _.Page._.get_collection().name,
+                    'let': { 'user_name': '$user_name' },
+                    'pipeline': [
+                        { '$match': {
+                            '_cls': _.UserPage._class_name,
+                            'ns': self.args.ns,
+                            '$expr': { '$eq': [ '$user_name', '$$user_name' ] }
+                        } },
+                        { '$project': {
+                            '_id': 1
+                        } }
+                    ],
+                    'as': 'userpages'
+                } },
+                { '$addFields': {
+                    'n_pages': { '$size': '$userpages' }
+                } },
+                { '$match': {
+                    'n_pages': 0
+                } }
+            ]
+        cursor = _.User.objects.aggregate(*pipeline)
         for doc in cursor:
             request_main = self.make_ap_request(
                 apprefix=doc['user_name'],

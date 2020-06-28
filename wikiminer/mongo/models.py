@@ -12,6 +12,7 @@ from dzeta.db.mongo import MongoModelInterface
 __all__ = [
     'Page',
     'UserPage',
+    'CategoryPage',
     'WikiProjectPage',
     'WikiProject',
     'Revision',
@@ -158,6 +159,7 @@ class WikiProjectPage(Page):
     wp : StringField
         Name of the WikiProject
     """
+    ns = IntField(required=True, choices=(4, 5))
     wp_raw = StringField(required=True)
     wp = StringField(default=None, null=True)
     # Settings
@@ -192,6 +194,29 @@ class UserPage(Page):
         'indexes': [
             '_cls',
             'user_name'
+        ],
+        'index_cls': True
+    }
+
+
+@MongoModelInterface.inject
+class CategoryPage(Page):
+    """Category page model.
+
+    Category pages are used only inasmuch they store information
+    on members of WikiProjects.
+
+    See Also
+    --------
+    Page : standard page model.
+    """
+    ns = IntField(required=True, choices=(14, 15))
+    wp_raw = StringField(required=True)
+    wp = StringField(default=None, null=True)
+    # Settings
+    meta = {
+        'indexes': [
+            '_cls'
         ],
         'index_cls': True
     }

@@ -85,10 +85,13 @@ class ApiWpUsers(ApiSpider):
             re.IGNORECASE
         )
 
-        cursor = _.WikiProjectPage.objects.aggregate(
+        cursor = _.Page.objects.aggregate(
             { '$match': {
-                '_cls': _.WikiProjectPage._class_name,
-                'ns': { '$in': [ 4 ] },
+                '_cls': { '$in': [
+                    _.WikiProjectPage._class_name,
+                    _.CategoryPage._class_name
+                ] },
+                'ns': { '$in': [ 4, 14 ] },
                 'title': { '$not': rx_title_blacklist },
                 'wp': { '$nin': list(WP_USER_PROJECT_BLACKLIST) }
             } },

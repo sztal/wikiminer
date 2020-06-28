@@ -10,6 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from itertools import chain
 import requests
+from bs4 import BeautifulSoup as bs
 from more_itertools import chunked
 from tqdm import tqdm
 from pymongo import UpdateMany, UpdateOne
@@ -68,7 +69,7 @@ def make_wp_pages(n=5000, update_kws=None, **kwds):
     update_kws = update_kws or {}
     rx_wp = re.compile(r"^Wikipedia( talk)?:\s*?WikiProject[^/]+", re.IGNORECASE)
     rx_ne = re.compile(r"Signpost|Editorial team", re.IGNORECASE)
-    rx_ex = re.compile(r"^Wikipedia( talk)?:\s*?Wiki\s*?Projects?:?\s*?([^/]*?)\s*?(/|$).*", re.IGNORECASE)
+    rx_ex = re.compile(r"^Wikipedia( talik)?:\s*?Wiki\s*?Projects?:?\s*?([^/]*?)\s*?(/|$).*", re.IGNORECASE)
     rx_rm = re.compile(r"^(WikiPedia:)?WikiProjects?:?\s*([^/]+)\s*(/|$)", re.IGNORECASE)
     # Aggregation stages
     match = { '$match': {
@@ -196,6 +197,96 @@ def make_user_pages(n=10000, update_kws=None, **kwds):
         print(info)
 
 
+def make_wp_member_category_pages(n=5000, update_kws=None, **kwds):
+    """Detect and flag category pages with WP member lists.
+
+    Parameters
+    ----------
+    n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    update_kws : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.to_update`.
+    **kwds :
+        Passed to :py:meth:`dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+    rx_wp = re.compile(
+        r"^Category:(Wikipedia:)?\s*Wiki\s*Project(?P<wp>.*?)(member|participant)",
+        re.IGNORECASE
+    )
+    _.CategoryPage.objects.update(_cls=_.Page._class_name)
+    _.Page.objects(
+        ns=14,
+        title=re.compile(r"WikiProject.*(member|participant)", re.IGNORECASE)
+    ).update(_cls=_.CategoryPage._class_name)
+
+    def make_update_op(doc):
+        doc['wp_raw'] = rx_wp.search(doc['title']).group('wp').strip()
+        op = _.CategoryPage._.dct_to_update(doc)
+        return op
+
+    cursor = _.CategoryPage.objects.aggregate(
+        { '$match': { 'ns': 14 } },
+        { '$project': {
+            '_id': 1,
+            'title': 1
+        } }
+    )
+    ops = map(make_update_op, cursor)
+    for info in _.CategoryPage._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+
+    cursor = _.CategoryPage.objects.aggregate(
+        { '$match': {
+            '_cls': _.CategoryPage._class_name,
+            'ns': 14
+        } },
+        { '$lookup': {
+            'from': _.CategoryPage._.get_collection().name,
+            'let': { 'wp': '$wp_raw' },
+            'pipeline': [
+                { '$match': {
+                    '_cls': _.WikiProjectPage._class_name,
+                    'ns': { '$in': [ 4, 5 ] }
+                } },
+                { '$group': {
+                    '_id': { 'wp': '$wp', 'wp_raw': '$wp_raw' }
+                } },
+                { '$project': {
+                    '_id': 0,
+                    'wp': '$_id.wp',
+                    'wp_raw': '$_id.wp_raw'
+                } },
+                { '$match': {
+                    '$expr': { '$or': [
+                        { '$eq': [ '$wp', '$$wp' ] },
+                        { '$eq': [ '$wp_raw', '$$wp' ] }
+                    ] }
+                } },
+                { '$project': {
+                    '_id': 1,
+                    'wp': 1
+                } }
+            ],
+            'as': 'wp_page'
+        } },
+        { '$project': {
+            'wp': { '$arrayElemAt': [ '$wp_page', 0 ] }
+        } },
+        { '$project': {
+            'wp': '$wp.wp'
+        } }
+    )
+
+    ops = map(lambda d: _.CategoryPage._.dct_to_update(d), cursor)
+    for info in _.CategoryPage._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+
+
 def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
     """Parse posts from pages' content and update them in the databse.
 
@@ -307,6 +398,51 @@ def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
     def make_update_op(doc):
         parser = WikiParserPost(doc.get('source_text', ''))
         users = list(parser.parse_user_shortcodes())
+        dct = dict(_id=doc['_id'], users=users)
+        op = model._.dct_to_update(dct, **update_kws)
+        return op
+
+    ops = tqdm(filter(None, map(make_update_op, cursor)))
+    for info in model._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+
+
+def parse_category_users(cursor, model, n=5000, update_kws=None, **kwds):
+    """Parse user shortcodes from member category pages.
+
+    Parameters
+    ----------
+    cursor : pymongo.command_cursor.CommandCursor
+        Cursor for iterating over documents.
+        Documents must contain `_id` and `source_text` fields.
+    model : interfaced mongoengine collection
+        :py:class:`mongoengine.Document` with
+        :py:class:`dzeta.db.mongo.MongoModelInterface`.
+    n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    update_kws : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.to_update`.
+    **kwds :
+        Passed to :py:meth:dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+    base_url = 'https://en.wikipedia.org/wiki/'
+    rx_start = re.compile(r"^User([ _]talk)?:", re.IGNORECASE)
+    rx_user = re.compile(r"^User([ _]talk)?:(?P<user>.*?)(/|#|$)")
+    selector = '#mw-pages .mw-content-ltr li > a'
+
+    def make_update_op(doc):
+        resp = requests.get(base_url+doc['title'])
+        html = bs(resp.content, features='html.parser')
+        users =  [
+            rx_user.search(x.text).group('user')
+            for x in html.select(selector)
+            if rx_start.search(x.text)
+        ]
+        users = list(set(users))
         dct = dict(_id=doc['_id'], users=users)
         op = model._.dct_to_update(dct, **update_kws)
         return op
