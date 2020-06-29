@@ -513,7 +513,8 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_talk_threads(filepath, model, ns, match=None, sequences=False, **kwds):
+def get_talk_threads(filepath, model, ns, match=None, sequences=False,
+                     sanitize_content=True, **kwds):
     """Get talk threads from WP pages.
 
     Parameters
@@ -529,12 +530,25 @@ def get_talk_threads(filepath, model, ns, match=None, sequences=False, **kwds):
         Should sequences be returned instead of raw threads.
         Sequences rearrange and duplicate data so for every path
         from a root to a leaf the full path is returned.
+    sanitize_content: bool
+        Should content be sanitize for NLP/Linguistic processing, i.e.
+        with LIWC.
     **kwds :
         Additional options for the aggregation pipeline.
     """
+    def sanitize(text):
+        text = re.sub(r"\{\{.*?\}\}", r"", text)
+        text = re.sub(r"\[\[.*?:(.*?)(\|.*?)?\]\]", r"\1", text)
+        text = re.sub(r" +", r" ", text)
+        text = re.sub(r"[\n\t]+", r"    ", text)
+        text = re.sub(r"-+\s*$", r"", text)
+        return text.strip()
+
     def unwind_threads(cursor):
         def unwind_subthreads(thread, idx, tid):
             subthreads = thread.pop('subthreads', None) or []
+            if thread and sanitize_content:
+                thread['content'] = sanitize(thread['content'])
             thread = {
                 **doc,
                 'tid': tid,
