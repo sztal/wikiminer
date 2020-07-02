@@ -299,7 +299,7 @@ def make_page_wp_labels(n=5000, update_kws=None, **kwds):
 
     Parameters
     ----------
-      n : int
+    n : int
         Batch size for updating.
         Full batch if falsy or non-positive.
     update_kws : dict, optional
@@ -344,6 +344,80 @@ def make_page_wp_labels(n=5000, update_kws=None, **kwds):
         info.pop('upserted', None)
         print(info)
     _.Page.objects(ns__exists=False).delete()
+
+
+def make_rev_sizes(n=1000, only_missing=True, update_kws=None, **kwds):
+    """Make revision sizes.
+
+    Parameters
+    ----------
+    n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    only_missing : bool
+        Should only missing sizes be calculated.
+    update_kws : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.to_update`.
+    **kwds :
+        Passed to :py:meth:`dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+
+    pipeline = []
+    if only_missing:
+        pipeline.append({
+            '$match': {
+                '$or': [
+                    { 'rev_size': None },
+                    { 'rev_size': { '$exists': False } }
+                ]
+            }
+        })
+    pipeline += [
+        { '$project': {
+            'parent_id': 1,
+            'size': 1
+        } },
+        { '$lookup': {
+            'from': _.Revision._.get_collection().name,
+            # 'localField': 'parent_id',
+            # 'foreignField': '_id',
+            'let': { 'parent_id': '$parent_id' },
+            'pipeline': [
+                { '$match': {
+                    '$expr': { '$eq': [ '$$parent_id', '$_id' ] }
+                } },
+                { '$project': {
+                    '_id': 0,
+                    'size': 1
+                } },
+                { '$limit': 1 }
+            ],
+            'as': 'parent'
+        } },
+        { '$addFields': {
+            'parent': { '$arrayElemAt': [ '$parent', 0 ] }
+        } },
+        { '$project': {
+            '_id': 1,
+            'rev_size': { '$cond': [
+                { '$ne': [ '$parent_id', 0 ] },
+                { '$subtract': [ '$size', '$parent.size' ] },
+                '$size'
+            ] }
+        } }
+    ]
+
+    cursor = _.Revision.objects.aggregate(*pipeline, **kwds)
+    ops = map(lambda d: _.Revision._.dct_to_update(d, **update_kws), cursor)
+    total = 0
+    for i, info in enumerate(_.Revision._.bulk_write(ops, n=n, **kwds), 1):
+        info.pop('upserted', None)
+        info['nTotal'] = total + info['nInserted'] + info['nUpserted'] \
+            + info['nMatched']
+        print(info)
+        total = info['nTotal']
 
 
 def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
@@ -807,3 +881,67 @@ def get_page_assessments(filepath=None, **kwds):
                 line = "\t".join(str(doc[col]) for col in columns)+"\n"
                 handle.write(line)
     return cursor
+
+
+def get_page_revisions(filepath, model, match=None):
+    """Get revisions, filtered for specific model and pages.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to store data at.
+    model : interfaced mongoengine collection
+        :py:class:`mongoengine.Document` with
+        :py:class:`dzeta.db.mongo.MongoModelInterface`.
+        It has to be one of the page models.
+    match: dict
+        Additional match stage for selecting pages.
+    """
+    cursor = model.objects.aggregate(
+        { '$match': {
+            '_cls': model._class_name,
+            **(match or {})
+        } },
+        { '$project': {
+            '_id': 0,
+            'page_id': '$_id',
+            'title': 1,
+            'ns': 1,
+            'projects': 1
+        } },
+        { '$unwind': '$projects' },
+        { '$lookup': {
+            'from': _.Revision._.get_collection().name,
+            'let': { 'page_id': '$page_id' },
+            'pipeline': [
+                { '$match': {
+                    '$expr': { '$eq': [ '$$page_id', '$page_id' ] }
+                } },
+                { '$project': {
+                    '_id': 0,
+                    'rev_id': '$_id',
+                    'user_name': 1,
+                    'size': 1,
+                    'sha1': 1,
+                    'rev_size': 1,
+                    'minor': 1,
+                    'timestamp': 1
+                } }
+            ],
+            'as': 'revisions'
+        } },
+        { '$unwind': '$revisions' },
+        { '$replaceRoot': {
+            'newRoot': { '$mergeObjects': [
+                {
+                    'page_id': '$page_id',
+                    'ns': '$ns',
+                    'title': '$title',
+                    'wp': '$projects'
+                },
+                '$revisions'
+            ] }
+        } }
+    )
+
+    cursor_jl(cursor, filepath)
