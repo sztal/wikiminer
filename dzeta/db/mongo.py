@@ -68,11 +68,13 @@ class MongoModelInterface(DBModelInterface):
         return self.dct_to_update(dct, upsert=upsert, **kwds)
 
 
-    def dct_to_update(self, dct, upsert=True, **kwds):
+    def dct_to_update(self, dct, match=None, upsert=True, **kwds):
         """Dump valid document dictionary to :py:class:`pymongo.UpdateOne` op.
 
         Parameters
         ----------
+        match: dict
+            Match query.
         upsert : bool
             Should upsert mode be used.
         **kwds :
@@ -80,8 +82,10 @@ class MongoModelInterface(DBModelInterface):
         """
         if hasattr(self.model, '_cls'):
             dct['_cls'] = self.model._class_name
+        if match is None:
+            match = { self.pk_field: dct.pop(self.pk_field) }
         return UpdateOne(
-            filter={ self.pk_field: dct.pop(self.pk_field) },
+            filter=match,
             update={ '$set': dct },
             upsert=upsert,
             **kwds

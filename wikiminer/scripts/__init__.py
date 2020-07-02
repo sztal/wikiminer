@@ -19,6 +19,13 @@ from wikiminer.parsers.wiki import WikiParserPost
 from wikiminer.parsers.threads import WikiParserThreads
 
 
+def cursor_jl(cursor, filepath):
+    """Dump cursor to JSON lines."""
+    with open(filepath, 'x') as f:
+        for doc in tqdm(cursor):
+            f.write(json.dumps(doc, default=str)+"\n")
+
+
 def docs_from_json(path, model, n=5000, update_kws=None, **kwds):
     """Create/update documents from json(lines) file.
 
@@ -285,6 +292,58 @@ def make_wp_member_category_pages(n=5000, update_kws=None, **kwds):
     for info in _.CategoryPage._.bulk_write(ops, n=n, **kwds):
         info.pop('upserted', None)
         print(info)
+
+
+def make_page_wp_labels(n=5000, update_kws=None, **kwds):
+    """Add WP labels to pages (main and main talk) based on page assessments.
+
+    Parameters
+    ----------
+      n : int
+        Batch size for updating.
+        Full batch if falsy or non-positive.
+    update_kws : dict, optional
+        Keyword parameters passed to
+        :py:meth:`dzeta.db.mongo.MongoModelInterface.to_update`.
+    **kwds :
+        Passed to :py:meth:`dzeta.db.mongo.MongoModelInterface.bulk_write`.
+    """
+    update_kws = update_kws or {}
+
+    cursor = _.Page.objects.aggregate(
+        { '$match': {
+            'ns': 0,
+            '$and': [
+                { 'assessments': { '$nin': [ {}, [], None ] } },
+                { 'assessments': { '$exists': True } }
+            ]
+        } },
+        { '$project': {
+            '_id': 1,
+            'title': 1,
+            'assessments': { '$objectToArray': '$assessments' }
+        } },
+        { '$project': {
+            '_id': 1,
+            'title': 1,
+            'projects': '$assessments.k'
+        } }
+    )
+
+    def make_update_ops(doc):
+        talk = {
+            'title': 'Talk:'+doc.pop('title'),
+            'projects': doc['projects'][:]
+        }
+        yield _.Page._.dct_to_update(doc, **update_kws)
+        match = { 'title': talk.pop('title') }
+        yield _.Page._.dct_to_update(talk, match, **update_kws)
+
+    ops = chain.from_iterable(map(make_update_ops, cursor))
+    for info in _.Page._.bulk_write(ops, n=n, **kwds):
+        info.pop('upserted', None)
+        print(info)
+    _.Page.objects(ns__exists=False).delete()
 
 
 def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):

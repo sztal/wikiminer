@@ -110,6 +110,9 @@ class Page(Document):
         Well-defined only for talk pages.
     users : ListField(StringField)
         Users who posted or left their shortcodes on the page.
+    projects : ListField(StringField)
+        WikiProjects to which the page belongs.
+        Used only by pages in main and main talk.
     """
     _id = IntField(primary_key=True, alias='pageid')
     ns = IntField(required=True)
@@ -125,6 +128,7 @@ class Page(Document):
     posts = EmbeddedDocumentListField(Post, default=list)
     topics = ListField(DictField(), default=list)
     users = ListField(StringField(), default=list)
+    projects = ListField(StringField(), default=list)
     # Settings
     meta = {
         'collection': 'wm_pages',
