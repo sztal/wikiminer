@@ -19,7 +19,7 @@ from wikiminer.parsers.wiki import WikiParserPost
 from wikiminer.parsers.threads import WikiParserThreads
 
 
-def cursor_jl(cursor, filepath):
+def cursor_to_jl(cursor, filepath):
     """Dump cursor to JSON lines."""
     with open(filepath, 'x') as f:
         for doc in tqdm(cursor):
@@ -883,7 +883,7 @@ def get_page_assessments(filepath=None, **kwds):
     return cursor
 
 
-def get_page_revisions(filepath, model, match=None):
+def get_page_revisions(filepath, model, match=None, **kwds):
     """Get revisions, filtered for specific model and pages.
 
     Parameters
@@ -896,8 +896,10 @@ def get_page_revisions(filepath, model, match=None):
         It has to be one of the page models.
     match: dict
         Additional match stage for selecting pages.
+    **kwds :
+        Additional aggregation pipeline options.
     """
-    cursor = model.objects.aggregate(
+    pipeline = [
         { '$match': {
             '_cls': model._class_name,
             **(match or {})
@@ -922,7 +924,7 @@ def get_page_revisions(filepath, model, match=None):
                     'rev_id': '$_id',
                     'user_name': 1,
                     'size': 1,
-                    'sha1': 1,
+                    # 'sha1': 1,
                     'rev_size': 1,
                     'minor': 1,
                     'timestamp': 1
@@ -942,6 +944,6 @@ def get_page_revisions(filepath, model, match=None):
                 '$revisions'
             ] }
         } }
-    )
-
-    cursor_jl(cursor, filepath)
+    ]
+    cursor = model.objects.aggregate(*pipeline, **kwds)
+    cursor_to_jl(cursor, filepath)
