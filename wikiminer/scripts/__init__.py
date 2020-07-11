@@ -883,7 +883,8 @@ def get_page_assessments(filepath=None, **kwds):
     return cursor
 
 
-def get_page_revisions(filepath, model, match=None, **kwds):
+def get_page_revisions(filepath, model, match_start=None,
+                       match_end=None, **kwds):
     """Get revisions, filtered for specific model and pages.
 
     Parameters
@@ -894,15 +895,17 @@ def get_page_revisions(filepath, model, match=None, **kwds):
         :py:class:`mongoengine.Document` with
         :py:class:`dzeta.db.mongo.MongoModelInterface`.
         It has to be one of the page models.
-    match: dict
+    match_start: dict
         Additional match stage for selecting pages.
+    match_end : dict
+        Additional match stage for filtering the final output.
     **kwds :
         Additional aggregation pipeline options.
     """
     pipeline = [
         { '$match': {
             '_cls': model._class_name,
-            **(match or {})
+            **(match_start or {})
         } },
         { '$project': {
             '_id': 0,
@@ -943,7 +946,8 @@ def get_page_revisions(filepath, model, match=None, **kwds):
                 },
                 '$revisions'
             ] }
-        } }
+        } },
+        { '$match': (match_end or {}) }
     ]
     cursor = model.objects.aggregate(*pipeline, **kwds)
     cursor_to_jl(cursor, filepath)
