@@ -25,6 +25,17 @@ def cursor_to_jl(cursor, filepath):
         for doc in tqdm(cursor):
             f.write(json.dumps(doc, default=str)+"\n")
 
+def cursor_to_tsv(cursor, filepath, sep="\t"):
+    """Dump cursor to a TSV file (or other similar)."""
+    first_doc = next(cursor)
+    cols = list(first_doc.keys())
+    with open(filepath, 'x') as f:
+        header = sep.join(str(col) for col in cols)
+        f.write(header+"\n")
+        for doc in tqdm(chain([first_doc], cursor)):
+            record = sep.join(str(doc[col]) for col in cols)
+            f.write(record+"\n")
+
 
 def docs_from_json(path, model, n=5000, update_kws=None, **kwds):
     """Create/update documents from json(lines) file.
@@ -949,5 +960,17 @@ def get_page_revisions(filepath, model, match_start=None,
         } },
         { '$match': (match_end or {}) }
     ]
-    cursor = model.objects.aggregate(*pipeline, **kwds)
-    cursor_to_jl(cursor, filepath)
+
+    def sanitize_strings(doc, fields=('user_name', 'title', 'wp')):
+        for field in fields:
+            doc[field] = re.sub(r"[\t\n]", "  ", doc[field])
+        return doc
+
+    cursor = map(sanitize_strings, model.objects.aggregate(*pipeline, **kwds))
+    if filepath.endswith('.jl'):
+        cursor_to_jl(cursor, filepath)
+    elif filepath.endswith('.csv'):
+        cursor_to_tsv(cursor, filepath, sep=";")
+    else:
+        cursor_to_tsv(cursor, filepath, sep="\t")
+
