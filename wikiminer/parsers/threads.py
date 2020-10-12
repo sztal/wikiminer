@@ -6,18 +6,10 @@ from . import WikiParser, WikiParserRX
 class WikiParserThreadsRX(WikiParserRX):
     """Container-class with pre-compiled regex objects."""
     thread = re.compile(r"(^\s*)(?==)", re.IGNORECASE | re.MULTILINE)
-    subthreads = re.compile(r"(?<=\(UTC\))$", re.IGNORECASE | re.MULTILINE)
-    topic = re.compile(r"^=+(?P<topic>.*?)=+", re.IGNORECASE)
-    # Signature
+    title = re.compile(r"=+(?P<title>.*?)=+", re.IGNORECASE)
     signature = re.compile(
-        r"(\[\[|\{\{)User([ _]talk)?:[^\[\]\{\}]*?(\]\]|\}\})"
-        r".*?"
-        r"\(UTC\)\s*$",
-        re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    sigstart = re.compile(
-        r".*?:(klat[ _])?resU(\[\[|\{\{)",
-        re.IGNORECASE | re.MULTILINE | re.DOTALL
+        r"(\[\[|\{\{)User([ _]talk)?:.*?(\]\]|\}\}).*?\([A-Z]{3,3}\)",
+        re.IGNORECASE
     )
     user = re.compile(
         r"(\[\[|\{\{)User([ _]talk)?:"
@@ -29,13 +21,12 @@ class WikiParserThreadsRX(WikiParserRX):
         r"[\s\W]*\(UTC\)\s*$",
         re.IGNORECASE
     )
-    # Helpers
-    header_start = re.compile(r"^\s*=+", re.IGNORECASE)
-    header = re.compile(r"^\s*=+.*?=+", re.IGNORECASE)
-    # depth = re.compile(r"^[:\*]+")
-    depth = re.compile(r"^:+")
-    outdent = re.compile(r"^\{\{(outdent|od\||od2).*?\}\}", re.IGNORECASE)
-    tz_trail = re.compile(r"^.*?(?=\)CTU\()", re.IGNORECASE | re.MULTILINE)
+    depth = re.compile(r"^[:\*#]+")
+    outdent = re.compile(
+        r"^:*\{\{(outdent|od)\|(?P<n>(\d+|:+))\}\}",
+        re.IGNORECASE
+    )
+    nl = re.compile(r"(\n|$)",)
 
 
 class WikiParserThreads(WikiParser):
@@ -55,147 +46,101 @@ class WikiParserThreads(WikiParser):
     # Class attributes
     rx = WikiParserThreadsRX
 
-    ###########################################################################
+    # ###########################################################################
 
-    def parse_threads(self):
-        """Iterate over threads in `source`."""
+    def iter_threads(self):
+        """Iterate over threads.
+
+        Threads are separated by header denoted by `==`.
+        """
         for thread in self.rx.thread.split(self.source):
             thread = thread.strip()
-            if not thread:
-                continue
-            thread = self.rx.tz_trail.sub(r"", thread[::-1])[::-1]
-            if thread and thread.startswith('='):
-                thread = self.parse_thread(thread)
-                thread = self.postprocess_thread(thread)
+            if thread:
+                title = self.rx.title.match(thread)
+                if title:
+                    thread = thread[title.end():]
+                    title = title.group('title').strip()
                 if thread:
-                    yield thread
+                    thread = thread.strip()
+                    yield title, thread
 
-    def parse_thread(self, thread):
-        """Parse single thread source string."""
-        thread = self.sanitize(thread)
-        topic = self.rx.topic.match(thread)
-        if topic:
-            topic = topic.group('topic').strip()
-        # Parse threads and subthreads
-        threads = self._iter_subthreads(thread)
+    def iter_posts(self, thread):
+        """Iterate over posts in a thread."""
+        # This is uglt
+        sigs = list(self.rx.signature.finditer(thread))
+        N = len(sigs)
+        start = None
+        for idx, rx in enumerate(sigs, 1):
+            if idx < N:
+                end = self.rx.nl.search(thread, rx.end()).start()
+            else:
+                end = None
+            post = thread[slice(start, end)]
+            yield rx.group(), post
+            start = end
+
+    def parse_threads(self):
+        """Parse threads and posts."""
+        for idx, thread in enumerate(self.iter_threads(), 1):
+            title, thread = thread
+            thread = {
+                'tid': idx,
+                'title': title,
+                'posts': [
+                    self._process_post(sig, post)
+                    for sig, post in self.iter_posts(thread)
+                ]
+            }
+            if thread['posts']:
+                yield self._process_thread(thread)
+
+    def _process_post(self, sig, post):
+        """Process signatures and posts in a tidy dictionary."""
+        user_name = self.rx.user.search(sig)
+        if user_name:
+            user_name = user_name.group('user')
+        timestamp = self.rx.timestamp.search(sig)
+        if timestamp:
+            timestamp = timestamp.group('ts')
+        post = post.strip()
+        depth = self._count_depth(post)
+        content = self.rx.depth.sub(r"", post).strip()
+        content = self.rx.outdent.sub(r"", content).strip()
         dct = {
-            'topic': topic,
-            'threads': [],
+            'user_name': self.sanitize_user_name(user_name),
+            'timestamp': self.parse_date(timestamp),
+            'depth': self._count_depth(post),
+            'content': content
         }
-
-        # Start iterating over particular threads
-        try:
-            thread = next(threads)
-        except StopIteration:
-            thread = None
-
-        while thread:
-            if not dct['threads'] \
-            or (thread['depth'] == 0 and not thread.get('outdent')):
-                dct['threads'].append(thread)
-            thread = self._parse_subthreads(thread, threads)
-
         return dct
 
-    def postprocess_thread(self, thread):
-        """Sanitize thread data and compute derived fields."""
-        def postprocess(thread, depth=0):
-            thread = self._sanitize_thread(thread)
-            thread['depth'] = depth
-            subthreads = [
-                postprocess(sub, depth=depth+1)
-                for sub in thread['subthreads']
-            ]
-            thread['subthreads'] = [ s for s in subthreads if s ]
-            thread = self.compute_fields(thread)
-            return thread
-
-        threads = [ postprocess(sub) for sub in thread['threads'] ]
-        thread['threads'] = [ t for t in threads if t ]
-        return thread
-
-    def compute_fields(self, thread):
-        """Compute additional fields on a thread object."""
-        content = thread['content']
-        sig = self.rx.signature.search(content)
-
-        if sig:
-            sig = self.rx.sigstart.match(sig.group()[::-1])
-            content = content[:-sig.end()]
-            sig = sig.group()[::-1]
-            user = self.rx.user.search(sig)
-            timestamp = self.rx.timestamp.search(sig)
-
-            if user is not None:
-                user = self.sanitize_user_name(user.group('user').strip())
-            if timestamp is not None:
-                timestamp = timestamp.group('ts').strip()
-                timestamp = self.parse_date(timestamp)
-
-            thread.update(
-                content=content,
-                user_name=user,
-                timestamp=timestamp
-            )
-            thread.pop('outdent', None)
-            return thread
-        return None
-
-    def _parse_subthreads(self, thread, threads):
-        """Parse subthreads in a discussion thread.
-
-        Parameters
-        ----------
-        thread : dict
-            The current thread.
-        threads : sequence
-            Sequence of threads coming after `thread`.
-        """
-        try:
-            sub = next(threads)
-        except StopIteration:
-            sub = None
-
-        while sub:
-            outdent = bool(self.rx.outdent.match(sub['content']))
-            sub['outdent'] = outdent
-
-            if thread['depth'] < sub['depth'] or outdent:
-                if outdent:
-                    sub['depth'] = 0
-                thread['subthreads'].append(sub)
-                sub = self._parse_subthreads(sub, threads)
+    def _process_thread(self, thread):
+        # Sanitize depth values
+        for idx, post in enumerate(thread['posts']):
+            if idx == 0:
+                post['depth'] = 0
             else:
-                return sub
+                post['depth'] += 1
+            post['comments'] = []
+        # This is rather ugly
+        dtree = { 0: thread['posts'][0] }
+        for post in thread['posts'][1:]:
+            parent_depth = max(d for d in dtree if d < post['depth'])
+            post['depth'] = parent_depth + 1
+            dtree[parent_depth]['comments'].append(post)
+            dtree[post['depth']] = post
 
-    def _iter_subthreads(self, thread):
-        """Iterate over all subthreads in a thread source string.
-
-        Yields
-        ------
-        int, str
-            depth and subthread source string.
-        """
-        for sub in self.rx.subthreads.split(thread.strip()):
-            sub = sub.strip()
-            sub = self.rx.header.sub(r"", sub).strip()
-            if sub:
-                yield {
-                    'content': sub,
-                    'depth': self._count_depth(sub),
-                    'subthreads': []
-                }
-
-    def _sanitize_thread(self, thread):
-        """Sanitize thread content."""
-        content = thread['content'].strip()
-        content = self.rx.depth.sub(r"", content).strip()
-        content = self.rx.outdent.sub(r"", content).strip()
-        thread['content'] = content
-        return thread
+        return { 'title': thread['title'], 'dtree': dtree[0] }
 
     def _count_depth(self, s):
         m = self.rx.depth.match(s)
-        if m:
-            return len(m.group())
-        return 0
+        depth = len(m.group()) if m else 0
+        out = self.rx.outdent.match(s)
+        if out:
+            n = out.group('n')
+            if n.startswith(':'):
+                n = len(n)
+            else:
+                n = int(n)
+            depth += n
+        return depth

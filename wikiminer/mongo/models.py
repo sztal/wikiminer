@@ -113,6 +113,8 @@ class Page(Document):
     projects : ListField(StringField)
         WikiProjects to which the page belongs.
         Used only by pages in main and main talk.
+    discussions : ListField(DictField)
+        Discussion stored as discussion trees.
     """
     _id = IntField(primary_key=True, alias='pageid')
     ns = IntField(required=True)
@@ -129,6 +131,7 @@ class Page(Document):
     topics = ListField(DictField(), default=list)
     users = ListField(StringField(), default=list)
     projects = ListField(StringField(), default=list)
+    discussions = ListField(DictField(), default=list)
     # Settings
     meta = {
         'collection': 'wm_pages',

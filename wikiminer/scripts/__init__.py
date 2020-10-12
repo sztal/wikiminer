@@ -475,7 +475,7 @@ def parse_posts(cursor, model, n=5000, update_kws=None, **kwds):
         print(info)
 
 
-def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
+def parse_discussions(cursor, model, n=5000, update_kws=None, **kwds):
     """Parse talk threads from pages' content and update them in the database.
 
     Parameters
@@ -499,10 +499,10 @@ def parse_talk_threads(cursor, model, n=5000, update_kws=None, **kwds):
         pbar.set_postfix({ '_id': str(doc['_id']) })
         parser = WikiParserThreads(doc.get('source_text', ''))
         _id = doc['_id']
-        topics = list(parser.parse_threads())
+        discussions = list(parser.parse_threads())
         dct = {
             '_id': _id,
-            'topics': topics
+            'discussions': discussions
         }
         op = model._.dct_to_update(dct, **update_kws)
         return op
