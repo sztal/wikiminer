@@ -657,23 +657,16 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_talk_threads(filepath, model, ns, match=None, sequences=False,
-                     sanitize_content=True, **kwds):
-    """Get talk threads from WP pages.
+def get_discussions(filepath, model, match=None,
+                    sanitize_content=True, **kwds):
+    """Get discussions from WP (talk) pages.
 
     Parameters
     ----------
     filepath : str
         Filepath to save data at. Format is JSON lines.
-    ns : int or tuple of int
-        Namespaces to use (``4`` and/or ``5``).
-        By default only talk is gathered.
     match: dict, optional
         Additional `$match` stage conditions.
-    sequences : bool
-        Should sequences be returned instead of raw threads.
-        Sequences rearrange and duplicate data so for every path
-        from a root to a leaf the full path is returned.
     sanitize_content: bool
         Should content be sanitize for NLP/Linguistic processing, i.e.
         with LIWC.
@@ -686,96 +679,45 @@ def get_talk_threads(filepath, model, ns, match=None, sequences=False,
         text = re.sub(r" +", r" ", text)
         text = re.sub(r"[\n\t]+", r"    ", text)
         text = re.sub(r"-+\s*$", r"", text)
+        test = re.sub(r"^\s*-+\s*", text)
         return text.strip()
 
-    def unwind_threads(cursor):
-        def unwind_subthreads(thread, idx, tid):
-            subthreads = thread.pop('subthreads', None) or []
-            if thread and sanitize_content:
-                thread['content'] = sanitize(thread['content'])
-            thread = {
-                **doc,
-                'tid': tid,
-                'idx': str(idx),
-                **thread
-            }
-            yield thread
-            for i, sub in enumerate(subthreads, 1):
-                yield from unwind_subthreads(sub, idx=f"{idx}.{i}", tid=tid)
-        tid = 0
-        pid = None
+    def flatten(dtree, idx=''):
+        idx = str(idx)
+        children = dtree.pop('comments', [])
+        yield { 'idx': idx, **dtree }
+        for i, child in enumerate(children, 1):
+            cid = str(i)
+            cid = idx+'.'+cid if idx else cid
+            yield from flatten(child, idx=cid)
+
+    def unwind(cursor):
         for doc in cursor:
-            if pid is not None and pid != doc['page_id']:
-                tid = 0
-            tid += 1
-            post = doc.pop('post')
-            yield from unwind_subthreads(post, 0, tid=tid)
-            pid = doc['page_id']
+            dtree = doc.pop('dtree', {})
+            if not dtree:
+                continue
+            for item in flatten(dtree):
+                yield { **doc, **item }
 
-    def unwind_sequences(threads):
-        raise NotImplementedError("see how 'unwind_threads' is implemented now")
-        path = []
-        threads = map(lambda dct: {
-            'page_id': dct['page_id'],
-            'topic': dct['topic'],
-            'idx': dct['idx']
-        }, threads)
-        for thread in threads:
-            same_topic = bool(path) and \
-                thread['page_id'] == path[-1]['page_id'] and \
-                thread['topic'] == path[-1]['topic']
-
-            if not same_topic or not thread['idx'].startswith(path[-1]['idx']):
-                yield from path
-                if same_topic:
-                    path = [
-                        t for t in path
-                        if thread['idx'].startswith(t['idx'])
-                    ]
-                else:
-                    path = []
-            path.append(thread)
-
-        yield from path
-
-    if not isinstance(ns, Sequence):
-        ns = (ns,)
     cursor = model.objects.aggregate(
         { '$match': {
             '_cls': model._class_name,
-            'ns': { '$in': ns },
             **(match or {})
         } },
-        { '$unwind': '$topics' },
-        { '$addFields': {
-            'topic': '$topics.topic',
-            'post': { '$arrayElemAt': [ '$topics.threads', 0 ] },
-            'threads': { '$slice': [ '$topics.threads', 1, 999999999 ] }
-        } },
+        { '$unwind': '$discussions' },
         { '$project': {
             '_id': 0,
             'page_id': '$_id',
             'ns': 1,
             'wp': 1,
             'title': 1,
-            'topic': 1,
-            'post': {
-                'content': '$post.content',
-                'depth': '$post.depth',
-                'user_name': '$post.user_name',
-                'timestamp': '$post.timestamp',
-                'subthreads': { '$concatArrays': [
-                    '$post.subthreads',
-                    '$threads'
-                ] }
-            }
+            'topic': '$discussions.topic',
+            'dtree': '$discussions.dtree'
         } },
         **kwds
     )
 
-    cursor = unwind_threads(cursor)
-    if sequences:
-        cursor = unwind_sequences(cursor)
+    cursor = unwind(cursor)
     with open(filepath, 'x') as f:
         for doc in tqdm(cursor):
             f.write(json.dumps(doc, default=str)+"\n")

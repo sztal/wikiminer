@@ -85,7 +85,7 @@ class WikiParserThreads(WikiParser):
             title, thread = thread
             thread = {
                 'tid': idx,
-                'title': title,
+                'topic': title,
                 'posts': [
                     self._process_post(sig, post)
                     for sig, post in self.iter_posts(thread)
