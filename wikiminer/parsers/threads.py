@@ -81,10 +81,10 @@ class WikiParserThreads(WikiParser):
 
     def parse_threads(self):
         """Parse threads and posts."""
-        for idx, thread in enumerate(self.iter_threads(), 1):
+        tid = 0
+        for thread in self.iter_threads():
             title, thread = thread
             thread = {
-                'tid': idx,
                 'topic': title,
                 'posts': [
                     self._process_post(sig, post)
@@ -92,6 +92,8 @@ class WikiParserThreads(WikiParser):
                 ]
             }
             if thread['posts']:
+                tid += 1
+                thread['tid'] = tid
                 yield self._process_thread(thread)
 
     def _process_post(self, sig, post):
@@ -116,21 +118,22 @@ class WikiParserThreads(WikiParser):
 
     def _process_thread(self, thread):
         # Sanitize depth values
-        for idx, post in enumerate(thread['posts']):
+        posts = thread.pop('posts', [])
+        for idx, post in enumerate(posts):
             if idx == 0:
                 post['depth'] = 0
             else:
                 post['depth'] += 1
             post['comments'] = []
         # This is rather ugly
-        dtree = { 0: thread['posts'][0] }
-        for post in thread['posts'][1:]:
+        dtree = { 0: posts[0] }
+        for post in posts[1:]:
             parent_depth = max(d for d in dtree if d < post['depth'])
             post['depth'] = parent_depth + 1
             dtree[parent_depth]['comments'].append(post)
             dtree[post['depth']] = post
 
-        return { 'title': thread['title'], 'dtree': dtree[0] }
+        return { **thread, 'dtree': dtree[0] }
 
     def _count_depth(self, s):
         m = self.rx.depth.match(s)

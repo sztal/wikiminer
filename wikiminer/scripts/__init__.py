@@ -711,6 +711,7 @@ def get_discussions(filepath, model, match=None,
             'ns': 1,
             'wp': 1,
             'title': 1,
+            'tid': '$discussions.tid',
             'topic': '$discussions.topic',
             'dtree': '$discussions.dtree'
         } },
