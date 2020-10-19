@@ -674,12 +674,12 @@ def get_discussions(filepath, model, match=None,
         Additional options for the aggregation pipeline.
     """
     def sanitize(text):
-        text = re.sub(r"\{\{.*?\}\}", r"", text)
-        text = re.sub(r"\[\[.*?:(.*?)(\|.*?)?\]\]", r"\1", text)
-        text = re.sub(r" +", r" ", text)
+        # text = re.sub(r"\{\{.*?\}\}", r"", text)
+        # text = re.sub(r"\[\[.*?:(.*?)(\|.*?)?\]\]", r"\1", text)
+        # text = re.sub(r" +", r" ", text)
         text = re.sub(r"[\n\t]+", r"    ", text)
-        text = re.sub(r"-+\s*$", r"", text)
-        test = re.sub(r"^\s*-+\s*", text)
+        # text = re.sub(r"-+\s*$", r"", text)
+        # text = re.sub(r"^\s*-+\s*", text)
         return text.strip()
 
     def flatten(dtree, idx=''):
@@ -697,6 +697,7 @@ def get_discussions(filepath, model, match=None,
             if not dtree:
                 continue
             for item in flatten(dtree):
+                item['content'] = sanitize(item['content'])
                 yield { **doc, **item }
 
     cursor = model.objects.aggregate(

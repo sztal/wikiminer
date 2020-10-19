@@ -104,14 +104,14 @@ class WikiParserThreads(WikiParser):
         timestamp = self.rx.timestamp.search(sig)
         if timestamp:
             timestamp = timestamp.group('ts')
-        post = post.strip()
-        depth = self._count_depth(post)
-        content = self.rx.depth.sub(r"", post).strip()
-        content = self.rx.outdent.sub(r"", content).strip()
+        content = post.strip()
+        depth = self._count_depth(content)
+        # content = self.rx.depth.sub(r"", content).strip()
+        # content = self.rx.outdent.sub(r"", content).strip()
         dct = {
             'user_name': self.sanitize_user_name(user_name),
             'timestamp': self.parse_date(timestamp),
-            'depth': self._count_depth(post),
+            'depth': depth,
             'content': content
         }
         return dct
@@ -125,15 +125,22 @@ class WikiParserThreads(WikiParser):
             else:
                 post['depth'] += 1
             post['comments'] = []
-        # This is rather ugly
-        dtree = { 0: posts[0] }
-        for post in posts[1:]:
-            parent_depth = max(d for d in dtree if d < post['depth'])
-            post['depth'] = parent_depth + 1
-            dtree[parent_depth]['comments'].append(post)
-            dtree[post['depth']] = post
 
-        return { **thread, 'dtree': dtree[0] }
+        dtree, posts = posts[0], posts[1:]
+        stack = [ (dtree, dtree['depth']) ]
+        for post in posts:
+            depth = post['depth']
+            while True:
+                parent, parent_depth = stack[-1]
+                if depth <= parent_depth:
+                    stack.pop()
+                else:
+                    post['depth'] = parent['depth'] + 1
+                    parent['comments'].append(post)
+                    stack.append((post, depth))
+                    break
+
+        return { **thread, 'dtree': dtree }
 
     def _count_depth(self, s):
         m = self.rx.depth.match(s)
