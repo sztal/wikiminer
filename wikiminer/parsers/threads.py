@@ -23,9 +23,12 @@ class WikiParserThreadsRX(WikiParserRX):
     )
     depth = re.compile(r"^[:\*#]+")
     outdent = re.compile(
-        r"^:*\{\{(outdent|od)\|(?P<n>(\d+|:+))\}\}",
-        re.IGNORECASE
+        r"^[:\*#]*\{\{(outdent|od)\d?(\|(\d+|:+))?\}\}"
     )
+    # outdent = re.compile(
+    #     r"^:*\{\{(outdent|od)(2|\|(?P<n>(\d+|:+)))?\}\}",
+    #     re.IGNORECASE
+    # )
     nl = re.compile(r"(\n|$)",)
 
 
@@ -70,13 +73,13 @@ class WikiParserThreads(WikiParser):
         sigs = list(self.rx.signature.finditer(thread))
         N = len(sigs)
         start = None
-        for idx, rx in enumerate(sigs, 1):
+        for idx, match in enumerate(sigs, 1):
             if idx < N:
-                end = self.rx.nl.search(thread, rx.end()).start()
+                end = self.rx.nl.search(thread, match.end()).start()
             else:
                 end = None
             post = thread[slice(start, end)]
-            yield rx.group(), post
+            yield match.group(), post
             start = end
 
     def parse_threads(self):
@@ -98,59 +101,68 @@ class WikiParserThreads(WikiParser):
 
     def _process_post(self, sig, post):
         """Process signatures and posts in a tidy dictionary."""
-        user_name = self.rx.user.search(sig)
-        if user_name:
-            user_name = user_name.group('user')
+        user_name = None
+        for match in self.rx.user.finditer(sig):
+            user_name = match.group('user')
         timestamp = self.rx.timestamp.search(sig)
         if timestamp:
             timestamp = timestamp.group('ts')
         content = post.strip()
-        depth = self._count_depth(content)
-        # content = self.rx.depth.sub(r"", content).strip()
-        # content = self.rx.outdent.sub(r"", content).strip()
+        depth, outdent = self._count_depth(content)
         dct = {
             'user_name': self.sanitize_user_name(user_name),
             'timestamp': self.parse_date(timestamp),
             'depth': depth,
-            'content': content
+            'dots': depth,
+            'outdent': outdent,
+            'content': content,
+            'comments': []
         }
         return dct
 
     def _process_thread(self, thread):
-        # Sanitize depth values
         posts = thread.pop('posts', [])
-        for idx, post in enumerate(posts):
-            if idx == 0:
-                post['depth'] = 0
-            else:
-                post['depth'] += 1
-            post['comments'] = []
-
         dtree, posts = posts[0], posts[1:]
-        stack = [ (dtree, dtree['depth']) ]
+        dtree['depth'] = dtree['dots'] = 0
+        stack = [ dtree ]
         for post in posts:
-            depth = post['depth']
-            while True:
-                parent, parent_depth = stack[-1]
-                if depth <= parent_depth:
-                    stack.pop()
-                else:
+            post['dots'] += 1
+            parent = None
+            while parent is None:
+                parent = stack[-1]
+                if post['outdent']:
                     post['depth'] = parent['depth'] + 1
-                    parent['comments'].append(post)
-                    stack.append((post, depth))
-                    break
+                elif post['dots'] <= parent['dots']:
+                    stack.pop()
+                    parent = None
+            post['depth'] = parent['depth'] + 1
+            parent['comments'].append(post)
+            stack.append(post)
+        thread = { **thread, 'dtree': dtree }
+        self._clean_thread(thread)
+        return thread
 
-        return { **thread, 'dtree': dtree }
+    def _clean_thread(self, thread):
+        def _clean(dtree):
+            del dtree['dots']
+            del dtree['outdent']
+            for dt in dtree['comments']:
+                _clean(dt)
+        _clean(thread['dtree'])
 
     def _count_depth(self, s):
         m = self.rx.depth.match(s)
         depth = len(m.group()) if m else 0
-        out = self.rx.outdent.match(s)
-        if out:
-            n = out.group('n')
-            if n.startswith(':'):
-                n = len(n)
-            else:
-                n = int(n)
-            depth += n
-        return depth
+        outdent = self.rx.outdent.match(s)
+        is_simple_outdent = False
+        # if out:
+        #     n = out.group('n')
+        #     if n:
+        #         if n.startswith(':'):
+        #             n = len(n)
+        #         else:
+        #             n = int(n)
+        #         depth += n
+        #     else:
+        #         is_simple_outdent = True
+        return depth, outdent
