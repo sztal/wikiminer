@@ -1,12 +1,12 @@
 """Mongoengine models."""
 # pylint: disable=no-member,protected-access
 from datetime import datetime
-from mongoengine import Document, EmbeddedDocument
+from mongoengine import Document as _Document, EmbeddedDocument
 from mongoengine import ObjectIdField, BooleanField
 from mongoengine import StringField, DateTimeField
 from mongoengine import IntField, FloatField
 from mongoengine import ListField, DictField, EmbeddedDocumentListField
-from dzeta.db.mongo import MongoModelInterface
+from dzeta.db.mongo import MongoModelInterface as _Interface
 
 
 __all__ = [
@@ -18,6 +18,39 @@ __all__ = [
     'Revision',
     'User'
 ]
+
+# Abstract classes and interfaces ---------------------------------------------
+
+class Document(_Document):
+    """Base document class."""
+    _id = ObjectIdField(primary_key=True)
+    _touched_at = DateTimeField(default=datetime.now)
+    # Settings
+    meta = {
+        'abstract': True
+    }
+
+class MongoModelInterface(_Interface):
+    """Modified Mongo model interface class."""
+    def from_dict(self, dct, only_dict=False, **kwds):
+        """Instantiate record from dict.
+
+        Parameters
+        ----------
+        dct : dict
+            Data dictionary.
+        only_dict : bool
+            Should only normalized `dict` be returned.
+        **kwds :
+            Passed to :py:meth:`marshmallow.Schema.load`.
+        """
+        doc = super().from_dict(dct, only_dict=only_dict, **kwds)
+        if only_dict and '_touched_at' not in doc:
+            doc['_touched_at'] = self._._touched_at.default()
+        return doc
+
+
+# Models ----------------------------------------------------------------------
 
 
 @MongoModelInterface.inject

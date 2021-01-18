@@ -20,6 +20,8 @@ class ApiAllPages(ApiSpider):
         Prefix to start enumerating pages from.
     apnamespace : int
         Namespace to enumarate from. Defaults to ``0`` (main).
+    apprefix : str
+        Prefix to filter pages by.
     apminsize : int
         Minimum byte size of a page.
     apmaxsize : int
@@ -35,6 +37,7 @@ class ApiAllPages(ApiSpider):
     class Args(Schema):
         apfrom = fields.Str(required=False)
         apnamespace = fields.Int(missing=0, strict=False)
+        apprefix = fields.Int(required=False)
         apminsize = fields.Int(required=False, strict=False)
         apmaxsize = fields.Int(required=False, strict=False)
         aplimit = fields.Int(missing=500, strict=False)
