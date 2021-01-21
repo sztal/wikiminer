@@ -3,6 +3,7 @@
 # pylint: disable=redefined-outer-name
 from more_itertools import chunked
 from pymongo import UpdateOne
+from pymongo.errors import BulkWriteError
 from mongoengine import BooleanField, DateTimeField
 from mongoengine import IntField, FloatField
 from mongoengine import EmbeddedDocumentField, EmbeddedDocumentListField
@@ -110,7 +111,25 @@ class MongoModelInterface(DBModelInterface):
             ops = [ ops ]
         collection = self.get_collection()
         for batch in ops:
-            res = collection.bulk_write(list(batch), **kwds)
+            batch = list(batch)
+            try:
+                res = collection.bulk_write(batch, **kwds)
+            except BulkWriteError as exc:
+                # Handle duplicate titles with new page ids
+                for error in exc.details['writeErrors']:
+                    if error['code'] != 11000 \
+                    or error['keyPattern'] != {'title': 1}:
+                        raise exc
+                    title = error['keyValue']['title']
+                    doc = collection.find_one({ 'title': title })
+                    collection.delete_one({ '_id': doc['_id'] })
+                    doc['_id'] = error['op']['q']['_id']
+                    collection.update_one(
+                        { '_id': doc.pop('_id') },
+                        { '$set': doc },
+                        upsert=True
+                    )
+                    collection.bulk_write(batch, **kwds)
             yield res.bulk_api_result
 
     @classmethod
