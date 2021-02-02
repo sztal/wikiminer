@@ -657,8 +657,7 @@ def get_direct_communication(filepath=None, **kwds):
     return cursor
 
 
-def get_discussions(filepath, model, match=None,
-                    sanitize_content=True, **kwds):
+def get_discussions(filepath, model, match=None, **kwds):
     """Get discussions from WP (talk) pages.
 
     Parameters
@@ -667,9 +666,6 @@ def get_discussions(filepath, model, match=None,
         Filepath to save data at. Format is JSON lines.
     match: dict, optional
         Additional `$match` stage conditions.
-    sanitize_content: bool
-        Should content be sanitize for NLP/Linguistic processing, i.e.
-        with LIWC.
     **kwds :
         Additional options for the aggregation pipeline.
     """
