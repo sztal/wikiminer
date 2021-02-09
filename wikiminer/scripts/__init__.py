@@ -37,7 +37,7 @@ def cursor_to_tsv(cursor, filepath, sep="\t"):
             f.write(record+"\n")
 
 
-def docs_from_json(path, model, n=5000, update_kws=None, **kwds):
+def docs_from_json(path, model, key=None, n=5000, update_kws=None, **kwds):
     """Create/update documents from json(lines) file.
 
     Parameters
@@ -59,8 +59,13 @@ def docs_from_json(path, model, n=5000, update_kws=None, **kwds):
     update_kws = update_kws or {}
 
     def make_update_op(line):
+        nonlocal key
         dct = model._.from_json(line, only_dict=True, partial=True)
-        op = model._.dct_to_update(dct, **update_kws)
+        if key:
+            match = { key: dct.pop(key) }
+        else:
+            match = None
+        op = model._.dct_to_update(dct, match=match, **update_kws)
         return op
 
     with open(path, 'r') as f:
@@ -541,6 +546,7 @@ def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
 
     def make_update_op(doc):
         parser = WikiParserPost(doc.get('source_text', ''))
+        # parser = WikiParserThreads(doc.get('source_text', ''))
         users = list(parser.parse_user_shortcodes())
         dct = dict(_id=doc['_id'], users=users)
         op = model._.dct_to_update(dct, **update_kws)

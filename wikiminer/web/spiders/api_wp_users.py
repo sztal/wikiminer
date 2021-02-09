@@ -12,7 +12,7 @@ from ... import _
 
 
 WP_USER_TITLE_PHRASES_BLACKLIST = (
-    'article alerts',
+    'article alert',
     'deletion sorting',
     'new articles',
     'unreferenced BLP',
@@ -113,7 +113,7 @@ class ApiWpUsers(ApiSpider):
                 list='users',
                 ususers='|'.join(
                     u for u in user_names
-                    if u not in bots and not self.rx_ip.match(u)
+                    if u and u not in bots and not self.rx_ip.match(u)
                 ),
                 usprop=self.args.usprop,
                 **kwds
@@ -128,14 +128,18 @@ class ApiWpUsers(ApiSpider):
         wp = response.meta
         users = jmp.search('query.users', data)
         for user in users:
-            if 'missing' in user or 'invalid' in user \
-            or 'bot' in user.get('groups', []):
+            if 'bot' in user.get('groups', []):
                 continue
+            if 'missing' in user or 'invalid' in user:
+                user['missing'] = True
+            else:
+                user['missing'] = False
             user['name'] = user['name']
             user['emailable'] = 'emailable' in user
             user['wp'] = wp.get(user['name'], [])
-            user['gender'] = {
-                'male': 'M',
-                'female': 'F'
-            }.get(user['gender'])
+            if 'gender' in user:
+                user['gender'] = {
+                    'male': 'M',
+                    'female': 'F'
+                }.get(user['gender'])
             yield user

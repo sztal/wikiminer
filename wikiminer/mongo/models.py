@@ -347,6 +347,8 @@ class User(Document):
         Rights a user has.
     emailable : BooleanField
         Is a user emailable with the API method ``Special:Emailuser``.
+    missing : BooleanField
+        Is user information missing in the current WP database.
     gender : StringField
         Gender. Has to be 'M', 'F' or null.
     wp : ListField(StringField)
@@ -360,6 +362,7 @@ class User(Document):
     memberships = ListField(default=None, alias='groupmemberships')
     rights = ListField(StringField(), default=[])
     emailable = BooleanField(default=False)
+    missing = BooleanField(default=False)
     gender = StringField(choices=('M', 'F'), null=True, default=None)
     wp = ListField(StringField(), default=[])
     # Settings

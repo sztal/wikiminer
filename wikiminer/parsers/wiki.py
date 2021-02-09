@@ -61,6 +61,7 @@ class WikiParserPost:
         "%b %d %Y %H:%M"
     )
     _rx_user_code = re.compile(
+        # r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<user>[^\{\}\[\]\|#/]+)",
         r"(\{\{|\[\[|:)User([ _]talk)?[\|:](?P<user>[^\{\}\[\]\|#/]+)",
         re.IGNORECASE
     )
@@ -138,7 +139,6 @@ class WikiParserPost:
                     continue
                 user_name = self._normalize_user_name(user_name)
                 yield user_name
-
         yield from unique_everseen(_iter())
 
     def parse_talk_threads(self, remove_comments=True):
