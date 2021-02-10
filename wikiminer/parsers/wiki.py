@@ -83,7 +83,8 @@ class WikiParserPost:
         s = html.unescape(x.strip())
         s = self._remove_format_control(s)
         s = self._rx_name.sub(r"", s)
-        s = s.capitalize()
+        if s:
+            s = s[0].upper() + s[1:]
         s = self._rx_ws.sub(r" ", s)
         return s.strip()
 

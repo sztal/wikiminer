@@ -12,13 +12,13 @@ from ... import _
 
 
 WP_USER_TITLE_PHRASES_BLACKLIST = (
-    'article alert',
-    'deletion sorting',
-    'new articles',
-    'unreferenced BLP',
-    'article request',
-    'requested articles',
-    '/top[^/]*?editors'
+    'article[ _]alert',
+    'deletion[ _]sorting',
+    'new[ _]article',
+    'unreferenced[ _]BLP',
+    'article[ _]request',
+    'requested[ _]article',
+    '/top[^/]*?editor'
 )
 WP_USER_PROJECT_BLACKLIST = (
     'Spam',
@@ -131,9 +131,10 @@ class ApiWpUsers(ApiSpider):
             if 'bot' in user.get('groups', []):
                 continue
             if 'missing' in user or 'invalid' in user:
-                user['missing'] = True
-            else:
-                user['missing'] = False
+                continue
+            #     user['missing'] = True
+            # else:
+            #     user['missing'] = False
             user['name'] = user['name']
             user['emailable'] = 'emailable' in user
             user['wp'] = wp.get(user['name'], [])

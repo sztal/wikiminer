@@ -333,8 +333,10 @@ class User(Document):
 
     Attributes
     ----------
-    _id : IntField
-        User id. Primary key.
+    _id : ObjectIdField
+        Document id. Primary key.
+    user_id : IntField
+        User id.
     user_name : StringField
         User name.
     editcount: IntField
@@ -354,6 +356,7 @@ class User(Document):
     wp : ListField(StringField)
         WikiProject a user is involved in.
     """
+    # _id = ObjectIdField(primary_key=True)
     _id = IntField(primary_key=True, alias='userid')
     user_name = StringField(unique=True, required=True, alias='name')
     editcount = IntField(min_value=0, required=True)

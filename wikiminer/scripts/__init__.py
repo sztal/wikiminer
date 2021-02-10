@@ -546,7 +546,6 @@ def parse_users(cursor, model, n=5000, update_kws=None, **kwds):
 
     def make_update_op(doc):
         parser = WikiParserPost(doc.get('source_text', ''))
-        # parser = WikiParserThreads(doc.get('source_text', ''))
         users = list(parser.parse_user_shortcodes())
         dct = dict(_id=doc['_id'], users=users)
         op = model._.dct_to_update(dct, **update_kws)

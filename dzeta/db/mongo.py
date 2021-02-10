@@ -129,7 +129,7 @@ class MongoModelInterface(DBModelInterface):
                         { '$set': doc },
                         upsert=True
                     )
-                    collection.bulk_write(batch, **kwds)
+                res = collection.bulk_write(batch, **kwds)
             yield res.bulk_api_result
 
     @classmethod
