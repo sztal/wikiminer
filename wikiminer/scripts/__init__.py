@@ -397,8 +397,6 @@ def make_rev_sizes(n=1000, only_missing=True, update_kws=None, **kwds):
         } },
         { '$lookup': {
             'from': _.Revision._.get_collection().name,
-            # 'localField': 'parent_id',
-            # 'foreignField': '_id',
             'let': { 'parent_id': '$parent_id' },
             'pipeline': [
                 { '$match': {
@@ -578,20 +576,38 @@ def parse_category_users(cursor, model, n=5000, update_kws=None, **kwds):
         Passed to :py:meth:dzeta.db.mongo.MongoModelInterface.bulk_write`.
     """
     update_kws = update_kws or {}
-    base_url = 'https://en.wikipedia.org/wiki/'
+    base_url = 'https://en.wikipedia.org'
     rx_start = re.compile(r"^User([ _]talk)?:", re.IGNORECASE)
     rx_user = re.compile(r"^User([ _]talk)?:(?P<user>.*?)(/|#|$)")
     selector = '#mw-pages .mw-content-ltr li > a'
+    next_page = '#mw-pages > a'
 
-    def make_update_op(doc):
-        resp = requests.get(base_url+doc['title'])
+    def iter_users(url, crawled=None):
+        url = base_url+url
+        # if 'inactive' in url.lower():
+            # return
+        print(url)
+        resp = requests.get(url)
         html = bs(resp.content, features='html.parser')
         users =  [
             rx_user.search(x.text).group('user')
             for x in html.select(selector)
             if rx_start.search(x.text)
         ]
-        users = list(set(users))
+        yield from set(users)
+        # Check next pages
+        _next = html.select(next_page)
+        for a in _next:
+            if a and a.text.lower() == 'next page':
+                url = a.attrs['href']
+                crawled = crawled or set()
+                if url not in crawled:
+                    crawled.add(url)
+                    yield from iter_users(url, crawled=crawled)
+                break
+
+    def make_update_op(doc):
+        users = list(set(iter_users('/wiki/'+doc['title'])))
         dct = dict(_id=doc['_id'], users=users)
         op = model._.dct_to_update(dct, **update_kws)
         return op
